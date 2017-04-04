@@ -9,9 +9,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "common.h"
 #include "dchip8.h"
 #include "dchip8_platform.h"
+#include "dqnt.h"
 
 FILE_SCOPE bool globalRunning = false;
 FILE_SCOPE LARGE_INTEGER globalQueryPerformanceFrequency;
@@ -209,7 +209,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		renderBitmap.width          = header.biWidth;
 		renderBitmap.height         = header.biHeight;
 		renderBitmap.bytesPerPixel  = header.biBitCount / 8;
-		ASSERT(renderBitmap.bytesPerPixel >= 1);
+		DQNT_ASSERT(renderBitmap.bytesPerPixel >= 1);
 
 		HDC deviceContext = GetDC(mainWindow);
 		renderBitmap.handle =
@@ -230,7 +230,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	u8 stackMemory[4096]            = {};
 	PlatformMemory platformMemory   = {};
 	platformMemory.permanentMem     = &stackMemory;
-	platformMemory.permanentMemSize = (ARRAY_COUNT(stackMemory) / 4);
+	platformMemory.permanentMemSize = (DQNT_ARRAY_COUNT(stackMemory) / 4);
 
 	QueryPerformanceFrequency(&globalQueryPerformanceFrequency);
 	const f32 TARGET_FRAMES_PER_S = 60.0f;
@@ -292,9 +292,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		f32 msPerFrame = 1000.0f * frameTimeInS;
 
 		wchar_t windowTitleBuffer[128] = {};
-		_snwprintf_s(windowTitleBuffer, ARRAY_COUNT(windowTitleBuffer),
-		             ARRAY_COUNT(windowTitleBuffer), L"dchip-8 | %5.2f ms/f",
-		             msPerFrame);
+		_snwprintf_s(windowTitleBuffer, DQNT_ARRAY_COUNT(windowTitleBuffer),
+		             DQNT_ARRAY_COUNT(windowTitleBuffer),
+		             L"dchip-8 | %5.2f ms/f", msPerFrame);
 		SetWindowText(mainWindow, windowTitleBuffer);
 	}
 

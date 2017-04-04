@@ -1,7 +1,7 @@
 #ifndef DCHIP_8_PLATFORM
 #define DCHIP_8_PLATFORM
 
-#include "Common.h"
+#include "dqnt.h"
 
 typedef struct PlatformRenderBuffer
 {

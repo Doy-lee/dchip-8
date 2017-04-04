@@ -1,5 +1,5 @@
-#include "common.h"
 #include "dchip8_platform.h"
+#include "dqnt.h"
 
 typedef struct Chip8CPU
 {
@@ -54,15 +54,13 @@ typedef struct Chip8CPU
 } Chip8CPU;
 
 FILE_SCOPE Chip8CPU cpu;
-FILE_SCOPE u16      opCodes[35];
-
 void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
                    PlatformMemory memory)
 {
-	ASSERT(indexRegister >= 0 && indexRegister <= 0xFFF);
-	ASSERT(programCounter >= 0 && programCounter <= 0xFFF);
+	DQNT_ASSERT(indexRegister >= 0 && indexRegister <= 0xFFF);
+	DQNT_ASSERT(programCounter >= 0 && programCounter <= 0xFFF);
 
-	ASSERT(renderBuffer.bytesPerPixel == 4);
+	DQNT_ASSERT(renderBuffer.bytesPerPixel == 4);
 
 	const i32 numPixels = renderBuffer.width * renderBuffer.height;
 	u32 *bitmapBuffer   = (u32 *)renderBuffer.memory;
@@ -86,7 +84,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 
 	if (!cpu.isInit)
 	{
-		ASSERT(memory.permanentMemSize == (4096 / 4));
+		DQNT_ASSERT(memory.permanentMemSize == (4096 / 4));
 		cpu.isInit = true;
 
 		// NOTE: Everything before 0x200 is reserved for the actual emulator
@@ -94,8 +92,11 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 		cpu.programCounter     = INIT_ADDRESS;
 		cpu.I                  = 0;
 		cpu.stackPointer       = 0;
+
+		// TODO(doyle): Load rom
 	}
 
+#if 0
 	u8 *mainMem   = (u8 *)memory.permanentMem;
 	u8 opHighByte = mainMem[cpu.programCounter++];
 	u8 opLowByte  = mainMem[cpu.programCounter++];
@@ -121,7 +122,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 		case 0x20:
 		{
 			u16 loc = ((0x0F & opHighByte) << 8) | (0xFF & opLowByte);
-			ASSERT(loc <= 0x0FFF);
+			DQNT_ASSERT(loc <= 0x0FFF);
 
 			// JP addr - 1nnn - Jump to location nnn
 			if (opFirstNibble == 0x10)
@@ -131,10 +132,10 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			// Call addr - 2nnn - Call subroutine at nnn
 			else
 			{
-				ASSERT(opFirstNibble == 0x20);
+				DQNT_ASSERT(opFirstNibble == 0x20);
 
 				cpu.stackPointer++;
-				ASSERT(cpu.stackPointer < ARRAY_COUNT(cpu.stack));
+				DQNT_ASSERT(cpu.stackPointer < DQNT_ARRAY_COUNT(cpu.stack));
 				cpu.stack[cpu.stackPointer] = cpu.programCounter;
 			}
 
@@ -146,7 +147,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 		case 0x40:
 		{
 			u8 regNum = (0x0F & opHighByte);
-			ASSERT(regNum < ARRAY_COUNT(cpu.registerArray));
+			DQNT_ASSERT(regNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 			u8 valToCheck = opLowByte;
 
 			// SE Vx, byte - 3xkk - Skip next instruction if Vx == kk
@@ -158,7 +159,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			// SNE Vx, byte - 4xkk - Skip next instruction if Vx == kk
 			else
 			{
-				ASSERT(opFirstNibble == 0x40);
+				DQNT_ASSERT(opFirstNibble == 0x40);
 				if (cpu.registerArray[regNum] != valToCheck)
 					cpu.programCounter += 2;
 			}
@@ -169,10 +170,10 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 		case 0x50:
 		{
 			u8 firstRegNum = (0x0F & opHighByte);
-			ASSERT(firstRegNum < ARRAY_COUNT(cpu.registerArray));
+			DQNT_ASSERT(firstRegNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 
 			u8 secondRegNum = (0xF0 & opLowByte);
-			ASSERT(secondRegNum < ARRAY_COUNT(cpu.registerArray));
+			DQNT_ASSERT(secondRegNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 
 			if (cpu.registerArray[firstRegNum] ==
 			    cpu.registerArray[secondRegNum])
@@ -186,7 +187,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 		case 0x70:
 		{
 			u8 regNum = (0x0F & opHighByte);
-			ASSERT(regNum < ARRAY_COUNT(cpu.registerArray));
+			DQNT_ASSERT(regNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 			u8 valToOperateOn = opLowByte;
 
 			// LD Vx, byte - 6xkk - Set Vx = kk
@@ -197,7 +198,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			// ADD Vx, byte - 7xkk - Set Vx = Vx + kk
 			else
 			{
-				ASSERT(opFirstNibble == 0x70);
+				DQNT_ASSERT(opFirstNibble == 0x70);
 				cpu.registerArray[regNum] += valToOperateOn;
 			}
 
@@ -207,10 +208,10 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 		case 0x80:
 		{
 			u8 firstRegNum = (0x0F & opHighByte);
-			ASSERT(firstRegNum < ARRAY_COUNT(cpu.registerArray));
+			DQNT_ASSERT(firstRegNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 
 			u8 secondRegNum = (0xF0 & opLowByte);
-			ASSERT(secondRegNum < ARRAY_COUNT(cpu.registerArray));
+			DQNT_ASSERT(secondRegNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 
 			u8 *vx = &cpu.registerArray[firstRegNum];
 			u8 *vy = &cpu.registerArray[secondRegNum];
@@ -280,7 +281,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			// SHL Vx {, Vy} - 8xyE - Set Vx = SHL 1
 			else
 			{
-				ASSERT(opLowByte == 0x0E);
+				DQNT_ASSERT(opLowByte == 0x0E);
 				if ((*vx >> 7) == 1)
 					cpu.VF = 1;
 				else
@@ -295,10 +296,10 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 		case 0x90:
 		{
 			u8 firstRegNum = (0x0F & opHighByte);
-			ASSERT(firstRegNum < ARRAY_COUNT(cpu.registerArray));
+			DQNT_ASSERT(firstRegNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 
 			u8 secondRegNum = (0xF0 & opLowByte);
-			ASSERT(secondRegNum < ARRAY_COUNT(cpu.registerArray));
+			DQNT_ASSERT(secondRegNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 
 			u8 *vx = &cpu.registerArray[firstRegNum];
 			u8 *vy = &cpu.registerArray[secondRegNum];
@@ -327,7 +328,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 		case 0xC0:
 		{
 			u8 firstRegNum = (0x0F & opHighByte);
-			ASSERT(firstRegNum < ARRAY_COUNT(cpu.registerArray));
+			DQNT_ASSERT(firstRegNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 
 			u8 andBits = opLowByte;
 			u8 *vx     = &cpu.registerArray[firstRegNum];
@@ -360,7 +361,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			// Vx is not pressed
 			else
 			{
-				ASSERT(opLowByte == 0xA1);
+				DQNT_ASSERT(opLowByte == 0xA1);
 			}
 
 			if (skipNextInstruction) cpu.programCounter += 2;
@@ -370,7 +371,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 		case 0xF0:
 		{
 			u8 regNum = (0x0F & opHighByte);
-			ASSERT(regNum < ARRAY_COUNT(cpu.registerArray));
+			DQNT_ASSERT(regNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 			u8 *vx = &cpu.registerArray[regNum];
 
 			// LD Vx, DT - Fx07 - Set Vx = delay timer value
@@ -423,7 +424,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			// starting at location I.
 			else
 			{
-				ASSERT(opLowByte == 0x65);
+				DQNT_ASSERT(opLowByte == 0x65);
 				for (u32 regIndex = 0; regIndex <= regNum; regIndex++)
 				{
 					u32 mem_offset = regIndex;
@@ -434,4 +435,5 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 		}
 		break;
 	};
+#endif
 }

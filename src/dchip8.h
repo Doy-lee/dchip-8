@@ -3,6 +3,6 @@
 
 #include "dchip8_platform.h"
 
-void dchip8_update(PlatformRenderBuffer *renderBuffer);
+void dchip8_update(PlatformRenderBuffer *renderBuffer, PlatformInput *input);
 
 #endif

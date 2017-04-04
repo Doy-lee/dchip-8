@@ -8,13 +8,13 @@
 
 typedef uint32_t u32;
 typedef uint16_t u16;
+typedef uint8_t  u8;
 
 typedef int64_t i64;
 typedef int32_t i32;
 typedef int16_t i16;
 
 typedef float f32;
-typedef unsigned char u8;
 
 #define INVALID_CODE_PATH 0
 
@@ -88,7 +88,7 @@ inline FILE_SCOPE void common_wstrcat(const wchar_t *a, i32 lenA,
 	ASSERT(outIndex <= outLen);
 }
 
-inline FILE_SCOPE wchar_t common_wcharAsciiToLowercase(wchar_t character)
+inline FILE_SCOPE wchar_t common_wchar_ascii_to_lower(wchar_t character)
 {
 	if (character >= L'A' && character <= L'Z')
 	{

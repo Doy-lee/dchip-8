@@ -140,6 +140,9 @@ FILE_SCOPE void win32_process_messages(HWND window, PlatformInput *input)
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                    LPSTR lpCmdLine, int nShowCmd)
 {
+	////////////////////////////////////////////////////////////////////////////
+	// Initialise Win32 Window
+	////////////////////////////////////////////////////////////////////////////
 	WNDCLASSEX wc =
 	{
 		sizeof(WNDCLASSEX),
@@ -224,6 +227,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	////////////////////////////////////////////////////////////////////////////
 	// Update Loop
 	////////////////////////////////////////////////////////////////////////////
+	u8 stackMemory[4096]            = {};
+	PlatformMemory platformMemory   = {};
+	platformMemory.permanentMem     = &stackMemory;
+	platformMemory.permanentMemSize = (ARRAY_COUNT(stackMemory) / 4);
+
 	QueryPerformanceFrequency(&globalQueryPerformanceFrequency);
 	const f32 TARGET_FRAMES_PER_S = 60.0f;
 	f32 targetSecondsPerFrame     = 1 / TARGET_FRAMES_PER_S;
@@ -237,14 +245,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		////////////////////////////////////////////////////////////////////////
 		LARGE_INTEGER startFrameTime = win32_query_perf_counter_time();
 		{
-			PlatformInput input          = {};
-			win32_process_messages(mainWindow, &input);
+			PlatformInput platformInput = {};
+			platformInput.deltaForFrame = frameTimeInS;
+			win32_process_messages(mainWindow, &platformInput);
 
 			PlatformRenderBuffer platformBuffer = {};
 			platformBuffer.memory               = renderBitmap.memory;
 			platformBuffer.height               = renderBitmap.height;
 			platformBuffer.width                = renderBitmap.width;
-			dchip8_update(&platformBuffer, &input);
+			dchip8_update(platformBuffer, platformInput, platformMemory);
 		}
 
 		////////////////////////////////////////////////////////////////////////
@@ -275,18 +284,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 				    (DWORD)((targetSecondsPerFrame - workTimeInS) * 1000);
 				Sleep(remainingTimeInMs);
 			}
-
-			LARGE_INTEGER endFrameTime = win32_query_perf_counter_time();
-			frameTimeInS =
-			    win32_query_perf_counter_get_time(startFrameTime, endFrameTime);
-			f32 msPerFrame = 1000.0f * frameTimeInS;
-
-			wchar_t windowTitleBuffer[128] = {};
-			_snwprintf_s(windowTitleBuffer, ARRAY_COUNT(windowTitleBuffer),
-			             ARRAY_COUNT(windowTitleBuffer),
-			             L"dchip-8 | %5.2f ms/f", msPerFrame);
-			SetWindowText(mainWindow, windowTitleBuffer);
 		}
+
+		LARGE_INTEGER endFrameTime = win32_query_perf_counter_time();
+		frameTimeInS =
+		    win32_query_perf_counter_get_time(startFrameTime, endFrameTime);
+		f32 msPerFrame = 1000.0f * frameTimeInS;
+
+		wchar_t windowTitleBuffer[128] = {};
+		_snwprintf_s(windowTitleBuffer, ARRAY_COUNT(windowTitleBuffer),
+		             ARRAY_COUNT(windowTitleBuffer), L"dchip-8 | %5.2f ms/f",
+		             msPerFrame);
+		SetWindowText(mainWindow, windowTitleBuffer);
 	}
 
 	return 0;

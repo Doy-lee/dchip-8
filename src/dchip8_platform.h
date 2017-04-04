@@ -29,6 +29,8 @@ typedef struct KeyState
 
 typedef struct PlatformInput
 {
+	f32 deltaForFrame;
+
 	union {
 		KeyState key[key_count];
 		struct
@@ -41,5 +43,14 @@ typedef struct PlatformInput
 		};
 	};
 } PlatformInput;
+
+typedef struct PlatformMemory
+{
+	void *permanentMem;
+	u32   permanentMemSize;
+
+	void *transientMem;
+	u32   transientMemSize;
+} PlatformMemory;
 
 #endif

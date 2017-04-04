@@ -2,7 +2,8 @@
 @REM vcvarsall.bat to setup command-line compiler.
 
 @echo OFF
-set ProjectName=dchip-8
+set ProjectName=dchip8
+set CompileEntryPoint=..\src\unity_build.cpp
 
 ctime -begin %ProjectName%.ctm
 
@@ -47,7 +48,7 @@ REM incrmenetal:no, turn incremental builds off
 REM opt:ref, try to remove functions from libs that are referenced at all
 set LinkFlags=-incremental:no -opt:ref
 
-cl %CompileFlags% ..\src\%ProjectName%.cpp %IncludeFlags% /link -subsystem:WINDOWS,5.1 %LinkLibraries% %LinkFlags% /nologo /OUT:"%ProjectName%.exe"
+cl %CompileFlags% %CompileEntryPoint% %IncludeFlags% /link -subsystem:WINDOWS,5.1 %LinkLibraries% %LinkFlags% /nologo /OUT:"%ProjectName%.exe"
 
 popd
 ctime -end %ProjectName%.ctm

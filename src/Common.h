@@ -4,7 +4,6 @@
 #include "stdint.h"
 
 #define LOCAL_PERSIST static
-#define GLOBAL_VAR    static
 #define FILE_SCOPE    static
 
 typedef uint32_t u32;

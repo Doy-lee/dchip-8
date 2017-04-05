@@ -50,8 +50,17 @@ v2 V2i(i32 x, i32 y);
 ////////////////////////////////////////////////////////////////////////////////
 // String Ops
 ////////////////////////////////////////////////////////////////////////////////
-i32 dqnt_strcmp(const char *a, const char *b);
-i32 dqnt_strlen(const char *a);
+bool  dqnt_char_is_digit   (char c);
+bool  dqnt_char_is_alpha   (char c);
+bool  dqnt_char_is_alphanum(char c);
+
+i32   dqnt_strcmp (const char *a, const char *b);
+// Returns the length without the null terminator
+i32   dqnt_strlen (const char *a);
+char *dqnt_strncpy(char *dest, const char *src, i32 numChars);
+
+bool  dqnt_str_reverse(char *const buf, const i32 bufSize);
+i32   dqnt_str_to_i32 (char *const buf, const i32 bufSize);
 
 wchar_t dqnt_wchar_ascii_to_lower(wchar_t character);
 i32     dqnt_wstrcmp(const wchar_t *a, const wchar_t *b);
@@ -70,6 +79,8 @@ typedef struct RandPCGState
 void dqnt_rnd_pcg_seed (RandPCGState *pcg, u32 seed);
 // Returns a random number N between [0, 0xFFFFFFFF]
 u32  dqnt_rnd_pcg_next (RandPCGState *pcg);
+// Returns a random float N between [0.0, 1.0f]
+f32  dqnt_rnd_pcg_nextf(RandPCGState *pcg);
 // Returns a random integer N between [min, max]
 i32  dqnt_rnd_pcg_range(RandPCGState *pcg, i32 min, i32 max);
 
@@ -98,6 +109,24 @@ v2 V2i(i32 x, i32 y)
 ////////////////////////////////////////////////////////////////////////////////
 // String Ops
 ////////////////////////////////////////////////////////////////////////////////
+bool dqnt_char_is_digit(char c)
+{
+	if (c >= '0' && c <= '9') return true;
+	return false;
+}
+
+bool dqnt_char_is_alpha(char c)
+{
+	if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) return true;
+	return false;
+}
+
+bool dqnt_char_is_alphanum(char c)
+{
+	if (dqnt_char_is_alpha(c) || dqnt_char_is_digit(c)) return true;
+	return false;
+}
+
 i32 dqnt_strcmp(const char *a, const char *b)
 {
 	while ((*a) == (*b))
@@ -108,6 +137,86 @@ i32 dqnt_strcmp(const char *a, const char *b)
 	}
 
 	return (((*a) < (*b)) ? -1 : 1);
+}
+
+i32 dqnt_strlen(const char *a)
+{
+	i32 result = 0;
+	while (a[result]) result++;
+
+	return result;
+}
+
+char *dqnt_strncpy(char *dest, const char *src, i32 numChars)
+{
+	if (!dest) return NULL;
+	if (!src)  return dest;
+
+	for (i32 i  = 0; i < numChars; i++)
+		dest[i] = src[i];
+
+	return dest;
+}
+
+bool dqnt_str_reverse(char *const buf, const i32 bufSize)
+{
+	if (!buf) return false;
+	i32 mid = bufSize / 2;
+
+	for (i32 i = 0; i < mid; i++)
+	{
+		char tmp               = buf[i];
+		buf[i]                 = buf[(bufSize - 1) - i];
+		buf[(bufSize - 1) - i] = tmp;
+	}
+
+	return true;
+}
+
+i32 dqnt_str_to_i32(char *const buf, const i32 bufSize)
+{
+	if (!buf || bufSize == 0) return 0;
+
+	i32 index       = 0;
+	bool isNegative = false;
+	if (buf[index] == '-' || buf[index] == '+')
+	{
+		if (buf[index] == '-') isNegative = true;
+		index++;
+	}
+	else if (!dqnt_char_is_digit(buf[index]))
+	{
+		return 0;
+	}
+
+	i32 result = 0;
+	for (i32 i = index; i < bufSize; i++)
+	{
+		if (dqnt_char_is_digit(buf[i]))
+		{
+			result *= 10;
+			result += (buf[i] - '0');
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	if (isNegative) result *= -1;
+
+	return result;
+}
+
+wchar_t dqnt_wchar_ascii_to_lower(wchar_t character)
+{
+	if (character >= L'A' && character <= L'Z')
+	{
+		i32 shiftOffset = L'a' - L'A';
+		character += (wchar_t)shiftOffset;
+	}
+
+	return character;
 }
 
 i32 dqnt_wstrcmp(const wchar_t *a, const wchar_t *b)
@@ -137,30 +246,7 @@ void dqnt_wstrcat(const wchar_t *a, i32 lenA, const wchar_t *b, i32 lenB,
 	DQNT_ASSERT(outIndex <= outLen);
 }
 
-wchar_t dqnt_wchar_ascii_to_lower(wchar_t character)
-{
-	if (character >= L'A' && character <= L'Z')
-	{
-		i32 shiftOffset = L'a' - L'A';
-		character += (wchar_t)shiftOffset;
-	}
-
-	return character;
-}
-
 i32 dqnt_wstrlen(const wchar_t *a)
-{
-	i32 result = 0;
-	while ((*a))
-	{
-		result++;
-		a++;
-	}
-
-	return result;
-}
-
-i32 dqnt_strlen(const char *a)
 {
 	i32 result = 0;
 	while ((*a))
@@ -180,7 +266,7 @@ i32 dqnt_strlen(const char *a)
 
 // Convert a randomized u32 value to a float value x in the range 0.0f <= x
 // < 1.0f. Contributed by Jonatan Hedborg
-FILE_SCOPE f32 dqnt_rnd_f32_normalized_from_u32_(u32 value)
+FILE_SCOPE f32 dqnt_rnd_f32_normalized_from_u32_internal(u32 value)
 {
 	u32 exponent = 127;
 	u32 mantissa = value >> 9;
@@ -189,7 +275,7 @@ FILE_SCOPE f32 dqnt_rnd_f32_normalized_from_u32_(u32 value)
 	return fresult - 1.0f;
 }
 
-FILE_SCOPE u64 dqnt_rnd_murmur3_avalanche64_(u64 h)
+FILE_SCOPE u64 dqnt_rnd_murmur3_avalanche64_internal(u64 h)
 {
 	h ^= h >> 33;
 	h *= 0xff51afd7ed558ccd;
@@ -202,11 +288,11 @@ FILE_SCOPE u64 dqnt_rnd_murmur3_avalanche64_(u64 h)
 void dqnt_rnd_pcg_seed(RandPCGState *pcg, u32 seed)
 {
 	u64 value     = (((u64)seed) << 1ULL) | 1ULL;
-	value         = dqnt_rnd_murmur3_avalanche64_(value);
+	value         = dqnt_rnd_murmur3_avalanche64_internal(value);
 	pcg->state[0] = 0U;
 	pcg->state[1] = (value << 1ULL) | 1ULL;
 	dqnt_rnd_pcg_next(pcg);
-	pcg->state[0] += dqnt_rnd_murmur3_avalanche64_(value);
+	pcg->state[0] += dqnt_rnd_murmur3_avalanche64_internal(value);
 	dqnt_rnd_pcg_next(pcg);
 }
 
@@ -221,7 +307,7 @@ u32 dqnt_rnd_pcg_next(RandPCGState *pcg)
 
 f32 dqnt_rnd_pcg_nextf(RandPCGState *pcg)
 {
-	return dqnt_rnd_f32_normalized_from_u32_(dqnt_rnd_pcg_next(pcg));
+	return dqnt_rnd_f32_normalized_from_u32_internal(dqnt_rnd_pcg_next(pcg));
 }
 
 i32 dqnt_rnd_pcg_range(RandPCGState *pcg, i32 min, i32 max)

@@ -53,4 +53,16 @@ typedef struct PlatformMemory
 	u32   transientMemSize;
 } PlatformMemory;
 
+typedef struct PlatformFile
+{
+	void *handle;
+	u64   size;
+} PlatformFile;
+
+// Return true if successful, false if not
+bool platform_open_file (const wchar_t *const file, PlatformFile *platformFile);
+// Return the number of bytes read
+u32  platform_read_file (PlatformFile file, void *buffer, u32 numBytesToRead);
+void platform_close_file(PlatformFile *file);
+
 #endif

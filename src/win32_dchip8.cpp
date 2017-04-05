@@ -300,3 +300,55 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	return 0;
 }
+
+void platform_close_file(PlatformFile *file)
+{
+	CloseHandle(file->handle);
+	file->handle = NULL;
+	file->size   = 0;
+}
+
+u32 platform_read_file(PlatformFile file, void *buffer, u32 numBytesToRead)
+{
+	DWORD numBytesRead = 0;
+	if (file.handle && buffer)
+	{
+		HANDLE win32Handle = file.handle;
+		BOOL result =
+		    ReadFile(win32Handle, buffer, numBytesToRead, &numBytesRead, NULL);
+
+		// TODO(doyle): 0 also means it is completing async, but still valid
+		if (result == 0)
+		{
+			win32_error_box(L"ReadFile() failed.", nullptr);
+		}
+
+	}
+
+	return numBytesRead;
+}
+
+FILE_SCOPE u32 buffer[15000];
+bool platform_open_file(const wchar_t *const file, PlatformFile *platformFile)
+{
+	HANDLE handle = CreateFile(file, GENERIC_READ | GENERIC_WRITE, 0, NULL,
+	                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+	if (handle == INVALID_HANDLE_VALUE)
+	{
+		win32_error_box(L"CreateFile() failed.", nullptr);
+		return false;
+	}
+
+	LARGE_INTEGER size;
+	if (GetFileSizeEx(handle, &size) == 0)
+	{
+		win32_error_box(L"GetFileSizeEx() failed.", nullptr);
+		return false;
+	}
+
+	platformFile->handle = handle;
+	platformFile->size   = size.QuadPart;
+
+	return true;
+}

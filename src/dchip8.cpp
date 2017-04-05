@@ -10,6 +10,7 @@ enum Chip8State
 {
 	chip8state_init,
 	chip8state_load_file,
+	chip8state_await_input,
 	chip8state_running,
 	chip8state_off,
 };
@@ -65,6 +66,7 @@ typedef struct Chip8CPU
 	u8 stackPointer;
 	u16 stack[16];
 
+	u8 keyToStoreToRegisterIndex;
 	enum Chip8State state;
 } Chip8CPU;
 
@@ -285,7 +287,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 	if (cpu.state == chip8state_load_file)
 	{
 		PlatformFile file = {};
-		if (platform_open_file(L"roms/BLITZ", &file))
+		if (platform_open_file(L"roms/TETRIS", &file))
 		{
 			DQNT_ASSERT((cpu.INIT_ADDRESS + file.size) <=
 			            memory.permanentMemSize);
@@ -304,6 +306,25 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 		}
 	}
 #endif
+
+	if (cpu.state == chip8state_await_input)
+	{
+		const u32 OFFSET_TO_CHIP_CONTROLS = key_7;
+		for (i32 i = OFFSET_TO_CHIP_CONTROLS; i < DQNT_ARRAY_COUNT(input.key);
+		     i++)
+		{
+			KeyState checkKey = input.key[i];
+			if (checkKey.isDown)
+			{
+				u8 regIndex = cpu.keyToStoreToRegisterIndex;
+				u8 keyVal   = (u8)i - OFFSET_TO_CHIP_CONTROLS;
+				DQNT_ASSERT(keyVal >= 0 && keyVal <= 0x0F);
+
+				cpu.registerArray[regIndex] = keyVal;
+				cpu.state                   = chip8state_running;
+			}
+		}
+	}
 
 	if (cpu.state == chip8state_running)
 	{
@@ -356,20 +377,20 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			{
 				u8 regNum = (0x0F & opHighByte);
 				DQNT_ASSERT(regNum < DQNT_ARRAY_COUNT(cpu.registerArray));
+				u8 *vx = &cpu.registerArray[regNum];
+
 				u8 valToCheck = opLowByte;
 
 				// SE Vx, byte - 3xkk - Skip next instruction if Vx == kk
 				if (opFirstNibble == 0x30)
 				{
-					if (cpu.registerArray[regNum] == valToCheck)
-						cpu.programCounter += 2;
+					if (*vx == valToCheck) cpu.programCounter += 2;
 				}
 				// SNE Vx, byte - 4xkk - Skip next instruction if Vx == kk
 				else
 				{
 					DQNT_ASSERT(opFirstNibble == 0x40);
-					if (cpu.registerArray[regNum] != valToCheck)
-						cpu.programCounter += 2;
+					if (*vx != valToCheck) cpu.programCounter += 2;
 				}
 			}
 			break;
@@ -383,11 +404,10 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				u8 secondRegNum = (0xF0 & opLowByte) >> 4;
 				DQNT_ASSERT(secondRegNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 
-				if (cpu.registerArray[firstRegNum] ==
-				    cpu.registerArray[secondRegNum])
-				{
-					cpu.programCounter++;
-				}
+				u8 *vx = &cpu.registerArray[firstRegNum];
+				u8 *vy = &cpu.registerArray[secondRegNum];
+
+				if (*vx == *vy) cpu.programCounter += 2;
 			}
 			break;
 
@@ -398,16 +418,17 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				DQNT_ASSERT(regNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 				u8 valToOperateOn = opLowByte;
 
+				u8 *vx = &cpu.registerArray[regNum];
 				// LD Vx, byte - 6xkk - Set Vx = kk
 				if (opFirstNibble == 0x60)
 				{
-					cpu.registerArray[regNum] = valToOperateOn;
+					*vx = valToOperateOn;
 				}
 				// ADD Vx, byte - 7xkk - Set Vx = Vx + kk
 				else
 				{
 					DQNT_ASSERT(opFirstNibble == 0x70);
-					cpu.registerArray[regNum] += valToOperateOn;
+					*vx += valToOperateOn;
 				}
 			}
 			break;
@@ -444,26 +465,31 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				// XOR Vx, Vy - 8xy3 - Set Vx = Vx XOR Vy
 				else if (opFourthNibble == 0x03)
 				{
-					u8 result = (*vx & *vy);
+					u8 result = (*vx ^ *vy);
 					*vx       = result;
 				}
 				// ADD Vx, Vy - 8xy4 - Set Vx = Vx + Vy, set VF = carry
 				else if (opFourthNibble == 0x04)
 				{
 					u16 result = (*vx + *vy);
-					*vx        = (u8)result;
+					*vx = (result > 255) ? (u8)(result - 256) : (u8)result;
 
-					if (result > 255) cpu.VF = (result > 255) ? 1 : 0;
+					cpu.VF = (result > 255) ? 1 : 0;
 				}
 				// SUB Vx, Vy - 8xy5 - Set Vx = Vx - Vy, set VF = NOT borrow
 				else if (opFourthNibble == 0x05)
 				{
 					if (*vx > *vy)
+					{
 						cpu.VF = 1;
+						*vx -= *vy;
+					}
 					else
+					{
 						cpu.VF = 0;
+						*vx = (u8)(256 + *vx - *vy);
+					}
 
-					*vx -= *vy;
 				}
 				// SHR Vx {, Vy} - 8xy6 - Set Vx = Vx SHR 1
 				else if (opFourthNibble == 0x06)
@@ -479,11 +505,16 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				else if (opFourthNibble == 0x07)
 				{
 					if (*vy > *vx)
+					{
 						cpu.VF = 1;
+						*vx    = *vy - *vx;
+					}
 					else
+					{
 						cpu.VF = 0;
+						*vx    = (u8)(256 + *vy - *vx);
+					}
 
-					*vx = *vy - *vx;
 				}
 				// SHL Vx {, Vy} - 8xyE - Set Vx = SHL 1
 				else
@@ -526,7 +557,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			// JP V0, addr - Bnnn - Jump to location (nnn + V0)
 			case 0xB0:
 			{
-				u8 addr            = opLowByte + cpu.V0;
+				u16 addr = (((0x0F & opHighByte) << 8) | opLowByte) + cpu.V0;
 				cpu.programCounter = addr;
 			}
 			break;
@@ -534,14 +565,15 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			// RND Vx, byte - Cxkk - Set Vx = random byte AND kk
 			case 0xC0:
 			{
-				u8 firstRegNum = (0x0F & opHighByte);
-				DQNT_ASSERT(firstRegNum < DQNT_ARRAY_COUNT(cpu.registerArray));
-
-				u8 andBits = opLowByte;
-				u8 *vx     = &cpu.registerArray[firstRegNum];
+				u8 regNum = (0x0F & opHighByte);
+				DQNT_ASSERT(regNum < DQNT_ARRAY_COUNT(cpu.registerArray));
+				u8 *vx = &cpu.registerArray[regNum];
 
 				u8 randNum = (u8)dqnt_rnd_pcg_range(&pcgState, 0, 255);
-				*vx        = (randNum & opLowByte);
+				u8 andBits = opLowByte;
+				DQNT_ASSERT(randNum >= 0 && randNum <= 255);
+
+				*vx = (randNum & andBits);
 			}
 			break;
 
@@ -595,7 +627,6 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 						bool spriteBit = ((spriteBytes >> bitShift) & 1);
 						bool pixelIsOn = (pixelWasOn ^ spriteBit);
 
-						// TODO(doyle): wrap pixels around
 						// NOTE: If caused a pixel to XOR into off, then this is
 						// known as a "collision" in chip8
 						if (pixelWasOn && !pixelIsOn)
@@ -622,20 +653,30 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 
 			case 0xE0:
 			{
-				// TODO(doyle): Implement key checks
-				u8 checkKey = (0x0F & opHighByte);
+				u8 regNum = (0x0F & opHighByte);
+				DQNT_ASSERT(regNum < DQNT_ARRAY_COUNT(cpu.registerArray));
+				u8 vx = cpu.registerArray[regNum];
+				DQNT_ASSERT(vx >= 0 && vx <= 0x0F);
 
+				const u32 KEY_OFFSET_TO_START_CONTROLS = key_7;
+				DQNT_ASSERT((KEY_OFFSET_TO_START_CONTROLS + vx) <
+				            DQNT_ARRAY_COUNT(input.key));
+
+				KeyState checkKey =
+				    input.key[KEY_OFFSET_TO_START_CONTROLS + vx];
+				bool skipNextInstruction = false;
 				// SKP Vx - Ex9E - Skip next instruction if key with the value
 				// of Vx is pressed
-				bool skipNextInstruction = false;
 				if (opLowByte == 0x9E)
 				{
+					skipNextInstruction = checkKey.isDown;
 				}
 				// SKNP Vx - ExA1 - Skip next instruction if key with the value
 				// of Vx is not pressed
 				else
 				{
 					DQNT_ASSERT(opLowByte == 0xA1);
+					skipNextInstruction = !checkKey.isDown;
 				}
 
 				if (skipNextInstruction) cpu.programCounter += 2;
@@ -657,6 +698,8 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				// the key in Vx
 				else if (opLowByte == 0x0A)
 				{
+					cpu.state                     = chip8state_await_input;
+					cpu.keyToStoreToRegisterIndex = regNum;
 				}
 				// LD DT, Vx - Fx15 - Set delay timer = Vx
 				else if (opLowByte == 0x15)
@@ -676,15 +719,16 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				// LD F, Vx - Fx29 - Set I = location of sprite for digit Vx
 				else if (opLowByte == 0x29)
 				{
-					u8 hexCharFromFontSet = (0x0F & opHighByte);
+					u8 hexCharFromFontSet = *vx;
 					DQNT_ASSERT(hexCharFromFontSet >= 0x00 &&
 					            hexCharFromFontSet <= 0x0F);
 
 					const u8 BITS_IN_BYTE     = 8;
 					u8 fontSizeInMem          = BITS_IN_BYTE * 5;
 					u16 startMemAddrOfFontSet = 0;
-					cpu.I = (hexCharFromFontSet * fontSizeInMem) *
-					        startMemAddrOfFontSet;
+
+					cpu.I = startMemAddrOfFontSet +
+					        (hexCharFromFontSet * fontSizeInMem);
 				}
 				// LD B, Vx - Fx33 - Store BCD representations of Vx in memory
 				// locations I, I+1 and I+2

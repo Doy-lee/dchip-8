@@ -53,7 +53,7 @@ i32   dqnt_strcmp (const char *a, const char *b);
 i32   dqnt_strlen (const char *a);
 char *dqnt_strncpy(char *dest, const char *src, i32 numChars);
 
-bool  dqnt_str_reverse(char *const buf, const i32 bufSize);
+bool  dqnt_str_reverse(char *buf, const i32 bufSize);
 i32   dqnt_str_to_i32 (char *const buf, const i32 bufSize);
 void  dqnt_i32_to_str (i32 value, char *buf, i32 bufSize);
 
@@ -124,6 +124,10 @@ bool dqnt_char_is_alphanum(char c)
 
 i32 dqnt_strcmp(const char *a, const char *b)
 {
+	if (!a && !b) return -1;
+	if (!a) return -1;
+	if (!b) return -1;
+
 	while ((*a) == (*b))
 	{
 		if (!(*a)) return 0;
@@ -137,7 +141,7 @@ i32 dqnt_strcmp(const char *a, const char *b)
 i32 dqnt_strlen(const char *a)
 {
 	i32 result = 0;
-	while (a[result]) result++;
+	while (a && a[result]) result++;
 
 	return result;
 }
@@ -153,7 +157,7 @@ char *dqnt_strncpy(char *dest, const char *src, i32 numChars)
 	return dest;
 }
 
-bool dqnt_str_reverse(char *const buf, const i32 bufSize)
+bool dqnt_str_reverse(char *buf, const i32 bufSize)
 {
 	if (!buf) return false;
 	i32 mid = bufSize / 2;
@@ -253,6 +257,10 @@ wchar_t dqnt_wchar_ascii_to_lower(wchar_t character)
 
 i32 dqnt_wstrcmp(const wchar_t *a, const wchar_t *b)
 {
+	if (!a && !b) return -1;
+	if (!a) return -1;
+	if (!b) return -1;
+
 	while ((*a) == (*b))
 	{
 		if (!(*a)) return 0;

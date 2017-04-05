@@ -73,7 +73,6 @@ FILE_SCOPE RandPCGState pcgState;
 
 FILE_SCOPE void dchip8_init_memory(u8 *memory)
 {
-	DQNT_ASSERT(memory.permanentMemSize == 4096);
 	const u8 PRESET_FONTS[] =
 	{
 		// "0"
@@ -206,14 +205,10 @@ FILE_SCOPE void dchip8_init_cpu(Chip8CPU *chip8CPU)
 	chip8CPU->state = chip8state_load_file;
 }
 
-void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
-                   PlatformMemory memory)
+FILE_SCOPE
+void dchip8_debug_draw_half_colored_screen_internal(
+    PlatformRenderBuffer renderBuffer)
 {
-	DQNT_ASSERT(indexRegister >= 0 && indexRegister <= 0xFFF);
-	DQNT_ASSERT(programCounter >= 0 && programCounter <= 0xFFF);
-
-	DQNT_ASSERT(renderBuffer.bytesPerPixel == 4);
-
 	const i32 numPixels = renderBuffer.width * renderBuffer.height;
 	u32 *bitmapBuffer   = (u32 *)renderBuffer.memory;
 	for (i32 i = 0; i < numPixels; i++)
@@ -251,22 +246,49 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			bitmapBuffer[i] = color;
 		}
 	}
+}
+
+FILE_SCOPE void dchip8_init_display(PlatformRenderBuffer renderBuffer)
+{
+	// Init screen to 0 alpha, and let alpha simulate "turning on a pixel"
+	i32 numPixels     = renderBuffer.width * renderBuffer.height;
+	u32 *bitmapBuffer = (u32 *)renderBuffer.memory;
+	for (i32 i = 0; i < numPixels; i++)
+	{
+		u8 r = (u8)(0.0f);
+		u8 g = (u8)(0.0f);
+		u8 b = (u8)(0.0f);
+		u8 a = (u8)(0.0f);
+
+		u32 color       = (a << 24) | (r << 16) | (g << 8) | (b << 0);
+		bitmapBuffer[i] = color;
+	}
+}
+
+void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
+                   PlatformMemory memory)
+{
+	DQNT_ASSERT(cpu.indexRegister >= 0 && cpu.indexRegister <= 0xFFF);
+	DQNT_ASSERT(cpu.programCounter >= 0 && cpu.programCounter <= 0xFFF);
+	DQNT_ASSERT(renderBuffer.bytesPerPixel == 4);
+	DQNT_ASSERT(memory.permanentMemSize == 4096);
 
 	u8 *mainMem = (u8 *)memory.permanentMem;
 	if (cpu.state == chip8state_init)
 	{
 		dchip8_init_cpu(&cpu);
 		dchip8_init_memory(mainMem);
+		dchip8_init_display(renderBuffer);
 	}
 
-#if 0
+#if 1
 	if (cpu.state == chip8state_load_file)
 	{
 		PlatformFile file = {};
-		if (platform_open_file(L"roms/PONG", &file))
+		if (platform_open_file(L"roms/BLITZ", &file))
 		{
 			DQNT_ASSERT((cpu.INIT_ADDRESS + file.size) <=
-			            DQNT_ARRAY_COUNT(mainMem));
+			            memory.permanentMemSize);
 
 			void *loadToAddr = (void *)(&mainMem[cpu.INIT_ADDRESS]);
 			if (platform_read_file(file, loadToAddr, (u32)file.size))
@@ -296,15 +318,12 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				// CLS - 00E0 - Clear the display
 				if (opLowByte == 0xE0)
 				{
-					u32 numBytesToClear = renderBuffer.width *
-					                      renderBuffer.height *
-					                      renderBuffer.bytesPerPixel;
-					memset(renderBuffer.memory, 0, numBytesToClear);
+					dchip8_init_display(renderBuffer);
 				}
 				// RET - 00EE - Return from subroutine
 				else if (opLowByte == 0xEE)
 				{
-					cpu.programCounter = cpu.stack[cpu.stackPointer--];
+					cpu.programCounter = cpu.stack[--cpu.stackPointer];
 				}
 			}
 			break;
@@ -312,7 +331,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			case 0x10:
 			case 0x20:
 			{
-				u16 loc = ((0x0F & opHighByte) << 8) | (0xFF & opLowByte);
+				u16 loc = ((0x0F & opHighByte) << 8) | opLowByte;
 				DQNT_ASSERT(loc <= 0x0FFF);
 
 				// JP addr - 1nnn - Jump to location nnn
@@ -324,10 +343,8 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				else
 				{
 					DQNT_ASSERT(opFirstNibble == 0x20);
-
-					cpu.stackPointer++;
+					cpu.stack[cpu.stackPointer++] = cpu.programCounter;
 					DQNT_ASSERT(cpu.stackPointer < DQNT_ARRAY_COUNT(cpu.stack));
-					cpu.stack[cpu.stackPointer] = cpu.programCounter;
 				}
 
 				cpu.programCounter = loc;
@@ -363,7 +380,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				u8 firstRegNum = (0x0F & opHighByte);
 				DQNT_ASSERT(firstRegNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 
-				u8 secondRegNum = (0xF0 & opLowByte);
+				u8 secondRegNum = (0xF0 & opLowByte) >> 4;
 				DQNT_ASSERT(secondRegNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 
 				if (cpu.registerArray[firstRegNum] ==
@@ -400,37 +417,38 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				u8 firstRegNum = (0x0F & opHighByte);
 				DQNT_ASSERT(firstRegNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 
-				u8 secondRegNum = (0xF0 & opLowByte);
+				u8 secondRegNum = (0xF0 & opLowByte) >> 4;
 				DQNT_ASSERT(secondRegNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 
 				u8 *vx = &cpu.registerArray[firstRegNum];
 				u8 *vy = &cpu.registerArray[secondRegNum];
 
+				u8 opFourthNibble = (opLowByte & 0x0F);
 				// LD Vx, Vy - 8xy0 - Set Vx = Vy
-				if (opLowByte == 0x00)
+				if (opFourthNibble == 0x00)
 				{
 					*vx = *vy;
 				}
 				// OR Vx, Vy - 8xy1 - Set Vx = Vx OR Vy
-				else if (opLowByte == 0x01)
+				else if (opFourthNibble == 0x01)
 				{
 					u8 result = (*vx | *vy);
 					*vx       = result;
 				}
 				// AND Vx, Vy - 8xy2 - Set Vx = Vx AND Vy
-				else if (opLowByte == 0x02)
+				else if (opFourthNibble == 0x02)
 				{
 					u8 result = (*vx & *vy);
 					*vx       = result;
 				}
 				// XOR Vx, Vy - 8xy3 - Set Vx = Vx XOR Vy
-				else if (opLowByte == 0x03)
+				else if (opFourthNibble == 0x03)
 				{
 					u8 result = (*vx & *vy);
 					*vx       = result;
 				}
 				// ADD Vx, Vy - 8xy4 - Set Vx = Vx + Vy, set VF = carry
-				else if (opLowByte == 0x04)
+				else if (opFourthNibble == 0x04)
 				{
 					u16 result = (*vx + *vy);
 					*vx        = (u8)result;
@@ -438,7 +456,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 					if (result > 255) cpu.VF = (result > 255) ? 1 : 0;
 				}
 				// SUB Vx, Vy - 8xy5 - Set Vx = Vx - Vy, set VF = NOT borrow
-				else if (opLowByte == 0x05)
+				else if (opFourthNibble == 0x05)
 				{
 					if (*vx > *vy)
 						cpu.VF = 1;
@@ -448,7 +466,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 					*vx -= *vy;
 				}
 				// SHR Vx {, Vy} - 8xy6 - Set Vx = Vx SHR 1
-				else if (opLowByte == 0x06)
+				else if (opFourthNibble == 0x06)
 				{
 					if (*vx & 1)
 						cpu.VF = 1;
@@ -458,7 +476,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 					*vx >>= 1;
 				}
 				// SUBN Vx {, Vy} - 8xy7 - Set Vx = Vy - Vx, set VF = NOT borrow
-				else if (opLowByte == 0x07)
+				else if (opFourthNibble == 0x07)
 				{
 					if (*vy > *vx)
 						cpu.VF = 1;
@@ -470,7 +488,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				// SHL Vx {, Vy} - 8xyE - Set Vx = SHL 1
 				else
 				{
-					DQNT_ASSERT(opLowByte == 0x0E);
+					DQNT_ASSERT(opFourthNibble == 0x0E);
 					if ((*vx >> 7) == 1)
 						cpu.VF = 1;
 					else
@@ -487,7 +505,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				u8 firstRegNum = (0x0F & opHighByte);
 				DQNT_ASSERT(firstRegNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 
-				u8 secondRegNum = (0xF0 & opLowByte);
+				u8 secondRegNum = (0xF0 & opLowByte) >> 4;
 				DQNT_ASSERT(secondRegNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 
 				u8 *vx = &cpu.registerArray[firstRegNum];
@@ -500,7 +518,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			// LD I, addr - Annn - Set I = nnn
 			case 0xA0:
 			{
-				u8 valToSet       = opLowByte;
+				u16 valToSet       = ((0x0F & opHighByte) << 8) | opLowByte;
 				cpu.indexRegister = valToSet;
 			}
 			break;
@@ -531,14 +549,73 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			// location I at (Vx, Vy), set VF = collision
 			case 0xD0:
 			{
-				// TODO(doyle): Implement drawing
-				u8 posX                = (0x0F & opHighByte);
-				u8 posY                = (0xF0 & opLowByte);
+				u8 xRegister           = (0x0F & opHighByte);
+				u8 yRegister           = (0xF0 & opLowByte) >> 4;
+				DQNT_ASSERT(xRegister < DQNT_ARRAY_COUNT(cpu.registerArray) &&
+				            yRegister < DQNT_ARRAY_COUNT(cpu.registerArray));
+
+				u8 initPosX = cpu.registerArray[xRegister];
+				u8 initPosY = cpu.registerArray[yRegister];
+
 				u8 readNumBytesFromMem = (0x0F & opLowByte);
+				// NOTE: can't be more than 16 in Y according to specs.
+				DQNT_ASSERT(readNumBytesFromMem < 16);
+
+				u8 *renderBitmap          = (u8 *)renderBuffer.memory;
+				const i32 BYTES_PER_PIXEL = renderBuffer.bytesPerPixel;
+				i32 pitch = renderBuffer.width * BYTES_PER_PIXEL;
 
 				for (i32 i = 0; i < readNumBytesFromMem; i++)
 				{
-					u8 *memPtr = &mainMem[cpu.indexRegister + i];
+					u8 spriteBytes = mainMem[cpu.indexRegister + i];
+					u8 posY        = initPosY + (u8)i;
+
+					if (posY >= renderBuffer.height) posY = 0;
+
+					const i32 ALPHA_BYTE_INTERVAL = renderBuffer.bytesPerPixel;
+					const i32 BITS_IN_BYTE        = 8;
+					i32 baseBitShift              = BITS_IN_BYTE - 1;
+					for (i32 shift = 0; shift < BITS_IN_BYTE; shift++)
+					{
+						u8 posX = initPosX + (u8)shift;
+
+						if (posX >= renderBuffer.width) posX = 0;
+						u32 bitmapOffset =
+						    (posX * BYTES_PER_PIXEL) + (posY * pitch);
+
+						// NOTE: Since we are using a 4bpp bitmap, let's use the
+						// alpha channel to determine if a pixel is on or not.
+						u32 *pixel  = (u32 *)(&renderBitmap[bitmapOffset]);
+						u8 alphaBit = (*pixel >> 24);
+
+						DQNT_ASSERT(alphaBit == 0 || alphaBit == 255);
+						bool pixelWasOn = (alphaBit == 255) ? true : false;
+
+						i32 bitShift   = baseBitShift - shift;
+						bool spriteBit = ((spriteBytes >> bitShift) & 1);
+						bool pixelIsOn = (pixelWasOn ^ spriteBit);
+
+						// TODO(doyle): wrap pixels around
+						// NOTE: If caused a pixel to XOR into off, then this is
+						// known as a "collision" in chip8
+						if (pixelWasOn && !pixelIsOn)
+						{
+							cpu.VF = 1;
+						}
+						else
+						{
+							cpu.VF = 0;
+						}
+
+						if (pixelIsOn)
+						{
+							*pixel = 0xFFFFFFFF;
+						}
+						else
+						{
+							*pixel = 0;
+						}
+					}
 				}
 			}
 			break;
@@ -599,12 +676,31 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				// LD F, Vx - Fx29 - Set I = location of sprite for digit Vx
 				else if (opLowByte == 0x29)
 				{
-					// TODO: Implement
+					u8 hexCharFromFontSet = (0x0F & opHighByte);
+					DQNT_ASSERT(hexCharFromFontSet >= 0x00 &&
+					            hexCharFromFontSet <= 0x0F);
+
+					const u8 BITS_IN_BYTE     = 8;
+					u8 fontSizeInMem          = BITS_IN_BYTE * 5;
+					u16 startMemAddrOfFontSet = 0;
+					cpu.I = (hexCharFromFontSet * fontSizeInMem) *
+					        startMemAddrOfFontSet;
 				}
 				// LD B, Vx - Fx33 - Store BCD representations of Vx in memory
 				// locations I, I+1 and I+2
 				else if (opLowByte == 0x33)
 				{
+					DQNT_ASSERT(regNum < DQNT_ARRAY_COUNT(cpu.registerArray));
+					u8 vxVal = *vx;
+
+					const i32 NUM_DIGITS_IN_HUNDREDS = 3;
+					for (i32 i = 0; i < NUM_DIGITS_IN_HUNDREDS; i++)
+					{
+						u8 rem = vxVal % 10;
+						vxVal /= 10;
+
+						mainMem[cpu.I + ((NUM_DIGITS_IN_HUNDREDS-1) - i)] = rem;
+					}
 				}
 				// LD [I], Vx - Fx55 - Store register V0 through Vx in memory
 				// starting at location I.
@@ -632,6 +728,11 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			}
 			break;
 		};
+
+		if (cpu.delayTimer > 0) cpu.delayTimer--;
+
+		// TODO(doyle): This needs to play a buzzing sound whilst timer > 0
+		if (cpu.soundTimer > 0) cpu.soundTimer--;
 	}
 
 }

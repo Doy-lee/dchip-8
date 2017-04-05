@@ -3,8 +3,8 @@
 
 #include "dqnt.h"
 
-// NOTE: Platform buffers are expected to be bottom to top! I.e. origin is
-// bottom left.
+// NOTE: Platform buffers are expected to be top to bottom! I.e. origin is top
+// left, also 4 bytes per pixel with packing order A R G B
 typedef struct PlatformRenderBuffer
 {
 	i32   width;

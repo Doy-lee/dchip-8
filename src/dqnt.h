@@ -26,13 +26,7 @@ typedef float f32;
 
 #define DQNT_INVALID_CODE_PATH 0
 #define DQNT_ARRAY_COUNT(array) (sizeof(array) / sizeof(array[0]))
-
-#ifdef DEBUG_MODE
-	#define DQNT_ASSERT(expr) if (!(expr)) { (*((i32 *)0)) = 0; }
-#else
-	#define DQNT_ASSERT(expr)
-#endif
-
+#define DQNT_ASSERT(expr) if (!(expr)) { (*((i32 *)0)) = 0; }
 #define DQNT_MATH_ABS(x) (((x) < 0) ? (-(x)) : (x))
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -61,6 +55,7 @@ char *dqnt_strncpy(char *dest, const char *src, i32 numChars);
 
 bool  dqnt_str_reverse(char *const buf, const i32 bufSize);
 i32   dqnt_str_to_i32 (char *const buf, const i32 bufSize);
+void  dqnt_i32_to_str (i32 value, char *buf, i32 bufSize);
 
 wchar_t dqnt_wchar_ascii_to_lower(wchar_t character);
 i32     dqnt_wstrcmp(const wchar_t *a, const wchar_t *b);
@@ -206,6 +201,43 @@ i32 dqnt_str_to_i32(char *const buf, const i32 bufSize)
 	if (isNegative) result *= -1;
 
 	return result;
+}
+
+void dqnt_i32_to_str(i32 value, char *buf, i32 bufSize)
+{
+	if (!buf || bufSize == 0) return;
+
+	if (value == 0)
+	{
+		buf[0] = '0';
+		return;
+	}
+	
+	// NOTE(doyle): Max 32bit integer (+-)2147483647
+	i32 charIndex = 0;
+	bool negative           = false;
+	if (value < 0) negative = true;
+
+	if (negative) buf[charIndex++] = '-';
+
+	i32 val = DQNT_MATH_ABS(value);
+	while (val != 0 && charIndex < bufSize)
+	{
+		i32 rem          = val % 10;
+		buf[charIndex++] = (u8)rem + '0';
+		val /= 10;
+	}
+
+	// NOTE(doyle): If string is negative, we only want to reverse starting
+	// from the second character, so we don't put the negative sign at the end
+	if (negative)
+	{
+		dqnt_str_reverse(buf + 1, charIndex - 1);
+	}
+	else
+	{
+		dqnt_str_reverse(buf, charIndex);
+	}
 }
 
 wchar_t dqnt_wchar_ascii_to_lower(wchar_t character)

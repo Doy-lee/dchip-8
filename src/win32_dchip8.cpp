@@ -71,20 +71,28 @@ FILE_SCOPE void win32_display_render_bitmap(Win32RenderBitmap renderBitmap,
                                             HDC deviceContext, LONG width,
                                             LONG height)
 {
+	HDC stretchDC = CreateCompatibleDC(deviceContext);
+	SelectObject(stretchDC, renderBitmap.handle);
+
+	StretchBlt(deviceContext, 0, 0, width, height, stretchDC, 0,
+	           0, renderBitmap.width, renderBitmap.height, SRCCOPY);
+
+	// NOTE: Win32 AlphaBlend requires the RGB components to be premultiplied
+	// with alpha.
+#if 0
 	BLENDFUNCTION blend       = {};
 	blend.BlendOp             = AC_SRC_OVER;
 	blend.SourceConstantAlpha = 255;
 	blend.AlphaFormat         = AC_SRC_ALPHA;
 
-	HDC alphaBlendDC  = CreateCompatibleDC(deviceContext);
-	SelectObject(alphaBlendDC, renderBitmap.handle);
+	if (!AlphaBlend(deviceContext, 0, 0, width, height, deviceContext, 0, 0,
+	                width, height, blend))
+	{
+		OutputDebugString(L"AlphaBlend() failed.");
+	}
+#endif
 
-	AlphaBlend(deviceContext, 0, 0, width, height, alphaBlendDC, 0, 0,
-	           renderBitmap.width, renderBitmap.height, blend);
-	StretchBlt(deviceContext, 0, 0, width, height, deviceContext, 0, 0,
-	           renderBitmap.width, renderBitmap.height, SRCCOPY);
-
-	DeleteDC(alphaBlendDC);
+	DeleteDC(stretchDC);
 }
 
 FILE_SCOPE inline void win32_parse_key_msg(KeyState *key, MSG msg)
@@ -172,8 +180,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	// is slightly smaller than 800x600. Windows provides a function to help
 	// calculate the size you'd need by accounting for the window style.
 	RECT rect   = {};
-	rect.right  = 128;
-	rect.bottom = 64;
+	rect.right  = 256;
+	rect.bottom = 128;
 
 	DWORD windowStyle =
 	    WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
@@ -253,6 +261,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 			platformBuffer.memory               = renderBitmap.memory;
 			platformBuffer.height               = renderBitmap.height;
 			platformBuffer.width                = renderBitmap.width;
+			platformBuffer.bytesPerPixel        = renderBitmap.bytesPerPixel;
 			dchip8_update(platformBuffer, platformInput, platformMemory);
 		}
 

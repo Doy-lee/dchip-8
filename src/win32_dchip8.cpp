@@ -230,7 +230,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	u8 stackMemory[4096]            = {};
 	PlatformMemory platformMemory   = {};
 	platformMemory.permanentMem     = &stackMemory;
-	platformMemory.permanentMemSize = (DQNT_ARRAY_COUNT(stackMemory) / 4);
+	platformMemory.permanentMemSize = DQNT_ARRAY_COUNT(stackMemory);
 
 	QueryPerformanceFrequency(&globalQueryPerformanceFrequency);
 	const f32 TARGET_FRAMES_PER_S = 60.0f;

@@ -71,6 +71,141 @@ typedef struct Chip8CPU
 FILE_SCOPE Chip8CPU     cpu;
 FILE_SCOPE RandPCGState pcgState;
 
+FILE_SCOPE void dchip8_init_memory(u8 *memory)
+{
+	DQNT_ASSERT(memory.permanentMemSize == 4096);
+	const u8 PRESET_FONTS[] =
+	{
+		// "0"
+		0xF0, // @@@@ ----
+		0x90, // @--@ ----
+		0x90, // @--@ ----
+		0x90, // @--@ ----
+		0xF0, // @@@@----
+
+		// "1"
+		0x20, // --@- ----
+		0x60, // -@@- ----
+		0x20, // --@- ----
+		0x20, // --@- ----
+		0x70, // -@@@ ----
+
+		// "2"
+		0xF0, // @@@@ ----
+		0x10, // ---@ ----
+		0xF0, // @@@@ ----
+		0x80, // @--- ----
+		0xF0, // @@@@ ----
+
+		// "3"
+		0xF0, // @@@@ ----
+		0x10, // ---@ ----
+		0xF0, // @@@@ ----
+		0x10, // ---@ ----
+		0xF0, // @@@@ ----
+
+		// "4"
+		0x90, // @--@ ----
+		0x90, // @--@ ----
+		0xF0, // @@@@ ----
+		0x10, // ---@ ----
+		0x10, // ---@ ----
+
+		// "5"
+		0xF0, // @@@@ ----
+		0x80, // @--- ----
+		0xF0, // @@@@ ----
+		0x10, // ---@ ----
+		0xF0, // @@@@ ----
+
+		// "6"
+		0xF0, // @@@@ ----
+		0x80, // @--- ----
+		0xF0, // @@@@ ----
+		0x90, // @--@ ----
+		0xF0, // @@@@ ----
+
+		// "7"
+		0xF0, // @@@@ ----
+		0x10, // ---@ ----
+		0x20, // --@- ----
+		0x40, // -@-- ----
+		0x40, // -@-- ----
+
+		// "8"
+		0xF0, // @@@@ ----
+		0x90, // @--@ ----
+		0xF0, // @@@@ ----
+		0x90, // @--@ ----
+		0xF0, // @@@@ ----
+
+		// "9"
+		0xF0, // @@@@ ----
+		0x90, // @--@ ----
+		0xF0, // @@@@ ----
+		0x10, // ---@ ----
+		0xF0, // @@@@ ----
+
+		// "A"
+		0xF0, // @@@@ ----
+		0x90, // @--@ ----
+		0xF0, // @@@@ ----
+		0x90, // @--@ ----
+		0x90, // @--@ ----
+
+		// "B"
+		0xE0, // @@@- ----
+		0x90, // @--@ ----
+		0xE0, // @@@- ----
+		0x90, // @--@ ----
+		0xE0, // @@@- ----
+
+		// "C"
+		0xF0, // @@@@ ----
+		0x80, // @--- ----
+		0x80, // @--- ----
+		0x80, // @--- ----
+		0xF0, // @@@@ ----
+
+		// "D"
+		0xE0, // @@@- ----
+		0x90, // @--@ ----
+		0x90, // @--@ ----
+		0x90, // @--@ ----
+		0xE0, // @@@- ----
+
+		// "E"
+		0xF0, // @@@@ ----
+		0x80, // @--- ----
+		0xF0, // @@@@ ----
+		0x80, // @--- ----
+		0xF0, // @@@@ ----
+
+		// "F"
+		0xF0, // @@@@ ----
+		0x80, // @--- ----
+		0xF0, // @@@@ ----
+		0x80, // @--- ----
+		0x80  // @--- ----
+	};
+
+	for (i32 i = 0; i < DQNT_ARRAY_COUNT(PRESET_FONTS); i++)
+		memory[i] = PRESET_FONTS[i];
+}
+
+FILE_SCOPE void dchip8_init_cpu(Chip8CPU *chip8CPU)
+{
+	// NOTE: Everything before 0x200 is reserved for the actual emulator
+	chip8CPU->programCounter = chip8CPU->INIT_ADDRESS;
+	chip8CPU->I              = 0;
+	chip8CPU->stackPointer   = 0;
+
+	const u32 SEED = 0x8293A8DE;
+	dqnt_rnd_pcg_seed(&pcgState, SEED);
+
+	chip8CPU->state = chip8state_load_file;
+}
+
 void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
                    PlatformMemory memory)
 {
@@ -85,36 +220,46 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 	{
 		// NOTE: Win32 AlphaBlend requires the RGB components to be
 		// premultiplied with alpha.
-		f32 normA = 1.0f;
-		f32 normR = (normA * 0.0f);
-		f32 normG = (normA * 0.0f);
-		f32 normB = (normA * 1.0f);
+		if (i < numPixels * 0.5f)
+		{
+			f32 normA = 1.0f;
+			f32 normR = (normA * 0.0f);
+			f32 normG = (normA * 0.0f);
+			f32 normB = (normA * 1.0f);
 
-		u8 r = (u8)(normR * 255.0f);
-		u8 g = (u8)(normG * 255.0f);
-		u8 b = (u8)(normB * 255.0f);
-		u8 a = (u8)(normA * 255.0f);
+			u8 r = (u8)(normR * 255.0f);
+			u8 g = (u8)(normG * 255.0f);
+			u8 b = (u8)(normB * 255.0f);
+			u8 a = (u8)(normA * 255.0f);
 
-		u32 color       = (a << 24) | (r << 16) | (g << 8) | (b << 0);
-		bitmapBuffer[i] = color;
+			u32 color       = (a << 24) | (r << 16) | (g << 8) | (b << 0);
+			bitmapBuffer[i] = color;
+		}
+		else
+		{
+			f32 normA = 1.0f;
+			f32 normR = (normA * 1.0f);
+			f32 normG = (normA * 1.0f);
+			f32 normB = (normA * 1.0f);
+
+			u8 r = (u8)(normR * 255.0f);
+			u8 g = (u8)(normG * 255.0f);
+			u8 b = (u8)(normB * 255.0f);
+			u8 a = (u8)(normA * 255.0f);
+
+			u32 color       = (a << 24) | (r << 16) | (g << 8) | (b << 0);
+			bitmapBuffer[i] = color;
+		}
 	}
 
 	u8 *mainMem = (u8 *)memory.permanentMem;
 	if (cpu.state == chip8state_init)
 	{
-		DQNT_ASSERT(memory.permanentMemSize == (4096 / 4));
-
-		// NOTE: Everything before 0x200 is reserved for the actual emulator
-		cpu.programCounter     = cpu.INIT_ADDRESS;
-		cpu.I                  = 0;
-		cpu.stackPointer       = 0;
-
-		const u32 SEED = 0x8293A8DE;
-		dqnt_rnd_pcg_seed(&pcgState, SEED);
-
-		cpu.state = chip8state_load_file;
+		dchip8_init_cpu(&cpu);
+		dchip8_init_memory(mainMem);
 	}
 
+#if 0
 	if (cpu.state == chip8state_load_file)
 	{
 		PlatformFile file = {};
@@ -136,6 +281,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			platform_close_file(&file);
 		}
 	}
+#endif
 
 	if (cpu.state == chip8state_running)
 	{
@@ -150,6 +296,10 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				// CLS - 00E0 - Clear the display
 				if (opLowByte == 0xE0)
 				{
+					u32 numBytesToClear = renderBuffer.width *
+					                      renderBuffer.height *
+					                      renderBuffer.bytesPerPixel;
+					memset(renderBuffer.memory, 0, numBytesToClear);
 				}
 				// RET - 00EE - Return from subroutine
 				else if (opLowByte == 0xEE)
@@ -382,6 +532,14 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			case 0xD0:
 			{
 				// TODO(doyle): Implement drawing
+				u8 posX                = (0x0F & opHighByte);
+				u8 posY                = (0xF0 & opLowByte);
+				u8 readNumBytesFromMem = (0x0F & opLowByte);
+
+				for (i32 i = 0; i < readNumBytesFromMem; i++)
+				{
+					u8 *memPtr = &mainMem[cpu.indexRegister + i];
+				}
 			}
 			break;
 
@@ -391,15 +549,13 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				u8 checkKey = (0x0F & opHighByte);
 
 				// SKP Vx - Ex9E - Skip next instruction if key with the value
-				// of Vx
-				// is pressed
+				// of Vx is pressed
 				bool skipNextInstruction = false;
 				if (opLowByte == 0x9E)
 				{
 				}
 				// SKNP Vx - ExA1 - Skip next instruction if key with the value
-				// of
-				// Vx is not pressed
+				// of Vx is not pressed
 				else
 				{
 					DQNT_ASSERT(opLowByte == 0xA1);

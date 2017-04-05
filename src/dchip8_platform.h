@@ -3,6 +3,8 @@
 
 #include "dqnt.h"
 
+// NOTE: Platform buffers are expected to be bottom to top! I.e. origin is
+// bottom left.
 typedef struct PlatformRenderBuffer
 {
 	i32   width;

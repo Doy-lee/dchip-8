@@ -6,6 +6,7 @@
 #endif
 
 #include <Windows.h>
+#include <Commdlg.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -23,10 +24,84 @@ typedef struct Win32RenderBitmap
 	void       *memory;
 } Win32RenderBitmap;
 
+#define MIN_WIDTH  256;
+#define MIN_HEIGHT 128;
+typedef struct Win32State
+{
+	bool useCorrectAspectRatio = true;
+} Win32State;
+
 FILE_SCOPE bool              globalRunning = false;
 FILE_SCOPE Win32RenderBitmap globalRenderBitmap;
 FILE_SCOPE LARGE_INTEGER     globalQueryPerformanceFrequency;
+FILE_SCOPE Win32State        globalState;
 #define win32_error_box(text, title) MessageBox(nullptr, text, title, MB_OK);
+
+enum Win32Menu
+{
+	win32menu_file_exit,
+	win32menu_file_open,
+
+	win32menu_video_correct_aspect_ratio,
+	win32menu_video_4x,
+	win32menu_video_8x,
+	win32menu_video_12x,
+	win32menu_video_16x,
+};
+
+FILE_SCOPE v2 constrain_to_aspect_ratio(u32 width, u32 height, f32 ratioX,
+                                        f32 ratioY)
+{
+	v2 result = {};
+	f32 numRatioIncrementsToWidth  = (f32)(width / ratioX);
+	f32 numRatioIncrementsToHeight = (f32)(height / ratioY);
+
+	f32 leastIncrementsToSide =
+	    DQNT_MATH_MIN(numRatioIncrementsToHeight, numRatioIncrementsToWidth);
+
+	result.w = (f32)(ratioX * leastIncrementsToSide);
+	result.h = (f32)(ratioY * leastIncrementsToSide);
+	return result;
+}
+
+FILE_SCOPE void win32_create_menu(HWND window)
+{
+	HMENU menuBar  = CreateMenu();
+	{ // File Menu
+		HMENU menu = CreatePopupMenu();
+		AppendMenu(menuBar, MF_STRING | MF_POPUP, (UINT)menu, L"File");
+		AppendMenu(menu, MF_STRING, win32menu_file_open, L"Open ROM");
+		AppendMenu(menu, MF_STRING, win32menu_file_exit, L"Exit");
+	}
+
+	{ // Video Menu
+		HMENU menu = CreatePopupMenu();
+		AppendMenu(menuBar, MF_STRING | MF_POPUP, (UINT)menu, L"Video");
+		AppendMenu(menu, MF_STRING | MF_CHECKED,
+		           win32menu_video_correct_aspect_ratio,
+		           L"Use Correct Aspect Ratio");
+		AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
+		AppendMenu(menu, MF_STRING, win32menu_video_4x, L"4x");
+		AppendMenu(menu, MF_STRING, win32menu_video_8x, L"8x");
+		AppendMenu(menu, MF_STRING, win32menu_video_12x, L"12x");
+		AppendMenu(menu, MF_STRING, win32menu_video_16x, L"16x");
+	}
+
+	SetMenu(window, menuBar);
+
+	/*
+	MENUITEMINFO testMenuInfo = {};
+	testMenuInfo.cbSize       = sizeof(MENUITEMINFO);
+	testMenuInfo.fMask        = MIIM_TYPE | MIIM_SUBMENU | MIIM_ID;
+	testMenuInfo.fType        = MFT_STRING;
+	testMenuInfo.fState       = 0;
+	testMenuInfo.wID          = win32menu_file_test;
+	testMenuInfo.hSubMenu     = fileMenu;
+	testMenuInfo.dwTypeData   = L"Test";
+	testMenuInfo.cch          = dqnt_wstrlen(testMenuInfo.dwTypeData);
+	InsertMenuItem(menu, 0, true, &testMenuInfo);
+	*/
+}
 
 inline FILE_SCOPE void win32_get_client_dim(HWND window, LONG *width,
                                             LONG *height)
@@ -70,6 +145,12 @@ FILE_SCOPE LRESULT CALLBACK win32_main_proc_callback(HWND window, UINT msg,
 	LRESULT result = 0;
 	switch (msg)
 	{
+		case WM_CREATE:
+		{
+			win32_create_menu(window);
+		}
+		break;
+
 		case WM_CLOSE:
 		case WM_DESTROY:
 		{
@@ -81,13 +162,33 @@ FILE_SCOPE LRESULT CALLBACK win32_main_proc_callback(HWND window, UINT msg,
 		{
 			PAINTSTRUCT paint;
 			HDC deviceContext = BeginPaint(window, &paint);
-			LONG clientWidth, clientHeight;
-			win32_get_client_dim(window, &clientWidth, &clientHeight);
+
+			LONG renderWidth, renderHeight;
+			win32_get_client_dim(window, &renderWidth, &renderHeight);
+			if (globalState.useCorrectAspectRatio)
+			{
+				f32 ratioX = (f32)globalRenderBitmap.width;
+				f32 ratioY = (f32)globalRenderBitmap.height;
+				v2 newDim = constrain_to_aspect_ratio(renderWidth, renderHeight,
+				                                      ratioX, ratioY);
+
+				renderWidth  = (LONG)newDim.w;
+				renderHeight = (LONG)newDim.h;
+			}
+
 			win32_display_render_bitmap(globalRenderBitmap, deviceContext,
-			                            clientWidth, clientHeight);
+			                            renderWidth, renderHeight);
 			EndPaint(window, &paint);
 			break;
 		}
+
+		case WM_GETMINMAXINFO:
+		{
+			MINMAXINFO *mmi  = (MINMAXINFO *)lParam;
+			mmi->ptMaxSize.x = MIN_WIDTH;
+			mmi->ptMaxSize.y = MIN_HEIGHT;
+		}
+		break;
 
 		default:
 		{
@@ -124,6 +225,92 @@ FILE_SCOPE inline void win32_update_key(KeyState *key, bool isDown)
 	}
 }
 
+FILE_SCOPE void win32_handle_menu_messages(HWND window, MSG msg,
+                                           PlatformInput *input)
+{
+	switch (LOWORD(msg.wParam))
+	{
+		case win32menu_file_exit:
+		{
+			globalRunning = false;
+		}
+		break;
+
+		case win32menu_file_open:
+		{
+			wchar_t fileBuffer[MAX_PATH] = {};
+			OPENFILENAME openDialogInfo  = {};
+			openDialogInfo.lStructSize   = sizeof(OPENFILENAME);
+			openDialogInfo.hwndOwner     = window;
+			openDialogInfo.lpstrFile     = fileBuffer;
+			openDialogInfo.nMaxFile      = DQNT_ARRAY_COUNT(fileBuffer);
+			openDialogInfo.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+
+			if (GetOpenFileName(&openDialogInfo) != 0)
+			{
+				wchar_t candidateRom[MAX_PATH] = {};
+				wchar_t currentRom[MAX_PATH]   = {};
+				GetFullPathName(fileBuffer, DQNT_ARRAY_COUNT(candidateRom),
+				                candidateRom, nullptr);
+				GetFullPathName(input->rom, DQNT_ARRAY_COUNT(currentRom),
+				                currentRom, nullptr);
+
+				if (dqnt_wstrcmp(candidateRom, currentRom) != 0)
+				{
+					input->loadNewRom = true;
+
+					for (i32 i = 0; i < dqnt_wstrlen(candidateRom); i++)
+						input->rom[i] = candidateRom[i];
+				}
+			}
+		}
+		break;
+
+		case win32menu_video_4x:
+		case win32menu_video_8x:
+		case win32menu_video_12x:
+		case win32menu_video_16x:
+		{
+			u32 startingWidth  = 64;
+			u32 startingHeight = 32;
+
+			u32 modifier;
+			switch (LOWORD(msg.wParam))
+			{
+				default:
+				case win32menu_video_4x:  modifier = 4; break;
+				case win32menu_video_8x:  modifier = 8; break;
+				case win32menu_video_12x: modifier = 12; break;
+				case win32menu_video_16x: modifier = 16; break;
+			}
+
+			RECT rect   = {};
+			rect.right  = startingWidth * modifier;
+			rect.bottom = startingHeight * modifier;
+
+			DWORD windowStyle = (DWORD)GetWindowLong(window, GWL_STYLE);
+			AdjustWindowRect(&rect, windowStyle, true);
+
+			SetWindowPos(window, NULL, 0, 0, rect.right - rect.left,
+			             rect.bottom - rect.top, SWP_NOMOVE | SWP_NOZORDER);
+		}
+		break;
+
+		case win32menu_video_correct_aspect_ratio:
+		{
+			globalState.useCorrectAspectRatio =
+			    (globalState.useCorrectAspectRatio) ? false : true;
+		}
+		break;
+
+		default:
+		{
+			DQNT_ASSERT(DQNT_INVALID_CODE_PATH);
+		}
+		break;
+	}
+}
+
 FILE_SCOPE void win32_process_messages(HWND window, PlatformInput *input)
 {
 	MSG msg;
@@ -131,6 +318,12 @@ FILE_SCOPE void win32_process_messages(HWND window, PlatformInput *input)
 	{
 		switch (msg.message)
 		{
+			case WM_COMMAND:
+			{
+				win32_handle_menu_messages(window, msg, input);
+			}
+			break;
+
 			case WM_SYSKEYDOWN:
 			case WM_SYSKEYUP:
 			case WM_KEYDOWN:
@@ -173,7 +366,8 @@ FILE_SCOPE void win32_process_messages(HWND window, PlatformInput *input)
 
 					default: break;
 				}
-			};
+			}
+			break;
 
 			default:
 			{
@@ -200,7 +394,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		hInstance,
 		LoadIcon(NULL, IDI_APPLICATION),
 		LoadCursor(NULL, IDC_ARROW),
-		NULL, // GetSysColorBrush(COLOR_3DFACE),
+		GetSysColorBrush(COLOR_3DFACE),
 		L"", // LPCTSTR lpszMenuName
 		L"dchip-8Class",
 		NULL, // HICON hIconSm
@@ -219,12 +413,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	// is slightly smaller than 800x600. Windows provides a function to help
 	// calculate the size you'd need by accounting for the window style.
 	RECT rect   = {};
-	rect.right  = 256;
-	rect.bottom = 128;
-
+	rect.right  = MIN_WIDTH;
+	rect.bottom = MIN_HEIGHT;
 	DWORD windowStyle =
 	    WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
-	AdjustWindowRect(&rect, windowStyle, FALSE);
+	AdjustWindowRect(&rect, windowStyle, true);
 
 	HWND mainWindow = CreateWindowEx(
 	    WS_EX_COMPOSITED, wc.lpszClassName, L"dchip-8", windowStyle,
@@ -307,14 +500,22 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		// Rendering
 		////////////////////////////////////////////////////////////////////////
 		{
-			RECT clientRect = {};
-			GetClientRect(mainWindow, &clientRect);
-			LONG clientWidth  = clientRect.right - clientRect.left;
-			LONG clientHeight = clientRect.bottom - clientRect.top;
+			LONG renderWidth, renderHeight;
+			win32_get_client_dim(mainWindow, &renderWidth, &renderHeight);
+			if (globalState.useCorrectAspectRatio)
+			{
+				f32 ratioX = (f32)globalRenderBitmap.width;
+				f32 ratioY = (f32)globalRenderBitmap.height;
+				v2 newDim = constrain_to_aspect_ratio(renderWidth, renderHeight,
+				                                      ratioX, ratioY);
+
+				renderWidth  = (LONG)newDim.w;
+				renderHeight = (LONG)newDim.h;
+			}
 
 			HDC deviceContext = GetDC(mainWindow);
 			win32_display_render_bitmap(globalRenderBitmap, deviceContext,
-			                            clientWidth, clientHeight);
+			                            renderWidth, renderHeight);
 			ReleaseDC(mainWindow, deviceContext);
 		}
 

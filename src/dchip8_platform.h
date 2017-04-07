@@ -54,6 +54,9 @@ typedef struct PlatformInput
 {
 	f32 deltaForFrame;
 
+	bool loadNewRom;
+	wchar_t rom[260];
+
 	union {
 		KeyState key[key_count];
 		struct

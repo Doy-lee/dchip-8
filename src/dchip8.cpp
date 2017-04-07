@@ -8,11 +8,9 @@
 
 enum Chip8State
 {
-	chip8state_init,
-	chip8state_load_file,
+	chip8state_off,
 	chip8state_await_input,
 	chip8state_running,
-	chip8state_off,
 };
 
 typedef struct Chip8Controller
@@ -20,10 +18,9 @@ typedef struct Chip8Controller
 	bool key[0x10];
 } Chip8Controller;
 
+#define INIT_ADDRESS 0x200
 typedef struct Chip8CPU
 {
-	const u16 INIT_ADDRESS = 0x200;
-
 	union {
 		u8 registerArray[16];
 		struct
@@ -80,8 +77,11 @@ typedef struct Chip8CPU
 FILE_SCOPE Chip8CPU     cpu;
 FILE_SCOPE RandPCGState pcgState;
 
-FILE_SCOPE void dchip8_init_memory(u8 *memory)
+FILE_SCOPE void dchip8_init_memory(u8 *memory, u32 size)
 {
+	for (u32 i = 0; i < size; i++)
+		memory[i] = 0;
+
 	const u8 PRESET_FONTS[] =
 	{
 		// "0"
@@ -203,15 +203,15 @@ FILE_SCOPE void dchip8_init_memory(u8 *memory)
 
 FILE_SCOPE void dchip8_init_cpu(Chip8CPU *chip8CPU)
 {
+	memset(chip8CPU, 0, sizeof(*chip8CPU));
+
 	// NOTE: Everything before 0x200 is reserved for the actual emulator
-	chip8CPU->programCounter = chip8CPU->INIT_ADDRESS;
+	chip8CPU->programCounter = INIT_ADDRESS;
 	chip8CPU->I              = 0;
 	chip8CPU->stackPointer   = 0;
 
 	const u32 SEED = 0x8293A8DE;
 	dqnt_rnd_pcg_seed(&pcgState, SEED);
-
-	chip8CPU->state = chip8state_load_file;
 }
 
 FILE_SCOPE
@@ -323,22 +323,19 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 
 	u8 *mainMem                = (u8 *)memory.permanentMem;
 	Chip8Controller controller = dchip8_controller_map_input(input);
-	if (cpu.state == chip8state_init)
+
+	if (input.loadNewRom)
 	{
+		dchip8_init_memory(mainMem, memory.permanentMemSize);
 		dchip8_init_cpu(&cpu);
-		dchip8_init_memory(mainMem);
 		dchip8_init_display(renderBuffer);
-	}
 
-	if (cpu.state == chip8state_load_file)
-	{
 		PlatformFile file = {};
-		if (platform_open_file(L"roms/brix", &file))
+		if (platform_open_file(input.rom, &file))
 		{
-			DQNT_ASSERT((cpu.INIT_ADDRESS + file.size) <=
-			            memory.permanentMemSize);
+			DQNT_ASSERT((INIT_ADDRESS + file.size) <= memory.permanentMemSize);
 
-			void *loadToAddr = (void *)(&mainMem[cpu.INIT_ADDRESS]);
+			void *loadToAddr = (void *)(&mainMem[INIT_ADDRESS]);
 			if (platform_read_file(file, loadToAddr, (u32)file.size))
 			{
 				cpu.state = chip8state_running;
@@ -347,9 +344,10 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			{
 				cpu.state = chip8state_off;
 			}
-
 			platform_close_file(&file);
 		}
+
+		input.loadNewRom = false;
 	}
 
 	if (cpu.state == chip8state_await_input)
@@ -832,6 +830,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				break;
 			};
 		}
+
 		// IMPORTANT: Timers need to be decremented at a rate of 60hz. Since we
 		// can run the interpreter faster than that, make sure we decrement
 		// timers at the fixed rate.

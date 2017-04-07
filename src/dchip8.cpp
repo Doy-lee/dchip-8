@@ -287,7 +287,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 	if (cpu.state == chip8state_load_file)
 	{
 		PlatformFile file = {};
-		if (platform_open_file(L"roms/PONG", &file))
+		if (platform_open_file(L"roms/brix", &file))
 		{
 			DQNT_ASSERT((cpu.INIT_ADDRESS + file.size) <=
 			            memory.permanentMemSize);
@@ -597,12 +597,15 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				const i32 BYTES_PER_PIXEL = renderBuffer.bytesPerPixel;
 				i32 pitch = renderBuffer.width * BYTES_PER_PIXEL;
 
+				bool collisionFlag = false;
 				for (i32 i = 0; i < readNumBytesFromMem; i++)
 				{
 					u8 spriteBytes = mainMem[cpu.indexRegister + i];
 					u8 posY        = initPosY + (u8)i;
-
 					if (posY >= renderBuffer.height) posY = 0;
+
+					// NOTE: Flip the Y
+					posY = ((u8)(renderBuffer.height-1) - posY);
 
 					const i32 ALPHA_BYTE_INTERVAL = renderBuffer.bytesPerPixel;
 					const i32 BITS_IN_BYTE        = 8;
@@ -629,14 +632,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 
 						// NOTE: If caused a pixel to XOR into off, then this is
 						// known as a "collision" in chip8
-						if (pixelWasOn && !pixelIsOn)
-						{
-							cpu.VF = 1;
-						}
-						else
-						{
-							cpu.VF = 0;
-						}
+						if (pixelWasOn && !pixelIsOn) collisionFlag = true;
 
 						if (pixelIsOn)
 						{
@@ -648,6 +644,8 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 						}
 					}
 				}
+
+				cpu.VF = collisionFlag;
 			}
 			break;
 

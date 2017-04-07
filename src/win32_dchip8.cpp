@@ -43,11 +43,10 @@ FILE_SCOPE void win32_display_render_bitmap(Win32RenderBitmap renderBitmap,
 {
 	HDC stretchDC = CreateCompatibleDC(deviceContext);
 	SelectObject(stretchDC, renderBitmap.handle);
+	StretchBlt(deviceContext, 0, 0, width, height, stretchDC, 0, 0,
+	           renderBitmap.width, renderBitmap.height, SRCCOPY);
 
-	StretchBlt(deviceContext, 0, 0, width, height, stretchDC, 0,
-	           0, renderBitmap.width, renderBitmap.height, SRCCOPY);
-
-	// NOTE: Win32 AlphaBlend requires the RGB components to be premultiplied
+    // NOTE: Win32 AlphaBlend requires the RGB components to be premultiplied
 	// with alpha.
 #if 0
 	BLENDFUNCTION blend       = {};
@@ -382,7 +381,6 @@ u32 platform_read_file(PlatformFile file, void *buffer, u32 numBytesToRead)
 	return numBytesRead;
 }
 
-FILE_SCOPE u32 buffer[15000];
 bool platform_open_file(const wchar_t *const file, PlatformFile *platformFile)
 {
 	HANDLE handle = CreateFile(file, GENERIC_READ | GENERIC_WRITE, 0, NULL,

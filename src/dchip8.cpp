@@ -287,7 +287,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 	if (cpu.state == chip8state_load_file)
 	{
 		PlatformFile file = {};
-		if (platform_open_file(L"roms/TETRIS", &file))
+		if (platform_open_file(L"roms/PONG", &file))
 		{
 			DQNT_ASSERT((cpu.INIT_ADDRESS + file.size) <=
 			            memory.permanentMemSize);

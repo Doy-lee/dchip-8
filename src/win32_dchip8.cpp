@@ -13,50 +13,6 @@
 #include "dchip8_platform.h"
 #include "dqnt.h"
 
-FILE_SCOPE bool globalRunning = false;
-FILE_SCOPE LARGE_INTEGER globalQueryPerformanceFrequency;
-#define win32_error_box(text, title) MessageBox(nullptr, text, title, MB_OK);
-
-FILE_SCOPE LRESULT CALLBACK win32_main_proc_callback(HWND window, UINT msg,
-                                                     WPARAM wParam,
-                                                     LPARAM lParam)
-{
-	LRESULT result = 0;
-	switch (msg)
-	{
-		case WM_CLOSE:
-		case WM_DESTROY:
-		{
-			globalRunning = false;
-		}
-		break;
-
-		default:
-		{
-			result = DefWindowProc(window, msg, wParam, lParam);
-		}
-		break;
-	}
-
-	return result;
-}
-
-inline FILE_SCOPE f32 win32_query_perf_counter_get_time(LARGE_INTEGER start,
-                                                        LARGE_INTEGER end)
-{
-	f32 result = (f32)(end.QuadPart - start.QuadPart) /
-	             globalQueryPerformanceFrequency.QuadPart;
-	return result;
-}
-
-inline FILE_SCOPE LARGE_INTEGER win32_query_perf_counter_time()
-{
-	LARGE_INTEGER result;
-	QueryPerformanceCounter(&result);
-
-	return result;
-}
-
 typedef struct Win32RenderBitmap
 {
 	BITMAPINFO  info;
@@ -66,6 +22,20 @@ typedef struct Win32RenderBitmap
 	i32         bytesPerPixel;
 	void       *memory;
 } Win32RenderBitmap;
+
+FILE_SCOPE bool              globalRunning = false;
+FILE_SCOPE Win32RenderBitmap globalRenderBitmap;
+FILE_SCOPE LARGE_INTEGER     globalQueryPerformanceFrequency;
+#define win32_error_box(text, title) MessageBox(nullptr, text, title, MB_OK);
+
+inline FILE_SCOPE void win32_get_client_dim(HWND window, LONG *width,
+                                            LONG *height)
+{
+	RECT clientRect = {};
+	GetClientRect(window, &clientRect);
+	*width  = clientRect.right - clientRect.left;
+	*height = clientRect.bottom - clientRect.top;
+}
 
 FILE_SCOPE void win32_display_render_bitmap(Win32RenderBitmap renderBitmap,
                                             HDC deviceContext, LONG width,
@@ -91,8 +61,59 @@ FILE_SCOPE void win32_display_render_bitmap(Win32RenderBitmap renderBitmap,
 		OutputDebugString(L"AlphaBlend() failed.");
 	}
 #endif
-
 	DeleteDC(stretchDC);
+}
+
+FILE_SCOPE LRESULT CALLBACK win32_main_proc_callback(HWND window, UINT msg,
+                                                     WPARAM wParam,
+                                                     LPARAM lParam)
+{
+	LRESULT result = 0;
+	switch (msg)
+	{
+		case WM_CLOSE:
+		case WM_DESTROY:
+		{
+			globalRunning = false;
+		}
+		break;
+
+		case WM_PAINT:
+		{
+			PAINTSTRUCT paint;
+			HDC deviceContext = BeginPaint(window, &paint);
+			LONG clientWidth, clientHeight;
+			win32_get_client_dim(window, &clientWidth, &clientHeight);
+			win32_display_render_bitmap(globalRenderBitmap, deviceContext,
+			                            clientWidth, clientHeight);
+			EndPaint(window, &paint);
+			break;
+		}
+
+		default:
+		{
+			result = DefWindowProc(window, msg, wParam, lParam);
+		}
+		break;
+	}
+
+	return result;
+}
+
+inline FILE_SCOPE f32 win32_query_perf_counter_get_time(LARGE_INTEGER start,
+                                                        LARGE_INTEGER end)
+{
+	f32 result = (f32)(end.QuadPart - start.QuadPart) /
+	             globalQueryPerformanceFrequency.QuadPart;
+	return result;
+}
+
+inline FILE_SCOPE LARGE_INTEGER win32_query_perf_counter_time()
+{
+	LARGE_INTEGER result;
+	QueryPerformanceCounter(&result);
+
+	return result;
 }
 
 FILE_SCOPE inline void win32_parse_key_msg(KeyState *key, MSG msg)
@@ -217,7 +238,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		return -1;
 	}
 
-	Win32RenderBitmap renderBitmap = {};
 	{ // Initialise the renderbitmap
 		BITMAPINFOHEADER header = {};
 		header.biSize           = sizeof(BITMAPINFOHEADER);
@@ -232,20 +252,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		header.biClrUsed        = 0;
 		header.biClrImportant   = 0;
 
-		renderBitmap.info.bmiHeader = header;
-		renderBitmap.width          = header.biWidth;
-		renderBitmap.height         = header.biHeight;
-		renderBitmap.bytesPerPixel  = header.biBitCount / 8;
-		DQNT_ASSERT(renderBitmap.bytesPerPixel >= 1);
+		globalRenderBitmap.info.bmiHeader = header;
+		globalRenderBitmap.width          = header.biWidth;
+		globalRenderBitmap.height         = header.biHeight;
+		globalRenderBitmap.bytesPerPixel  = header.biBitCount / 8;
+		DQNT_ASSERT(globalRenderBitmap.bytesPerPixel >= 1);
 
 		HDC deviceContext = GetDC(mainWindow);
-		renderBitmap.handle =
-		    CreateDIBSection(deviceContext, &renderBitmap.info, DIB_RGB_COLORS,
-		                     &renderBitmap.memory, NULL, NULL);
+		globalRenderBitmap.handle = CreateDIBSection(
+		    deviceContext, &globalRenderBitmap.info, DIB_RGB_COLORS,
+		    &globalRenderBitmap.memory, NULL, NULL);
 		ReleaseDC(mainWindow, deviceContext);
 	}
 
-	if (!renderBitmap.memory)
+	if (!globalRenderBitmap.memory)
 	{
 		win32_error_box(L"CreateDIBSection() failed.", nullptr);
 		return -1;
@@ -277,11 +297,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 			win32_process_messages(mainWindow, &platformInput);
 
 			PlatformRenderBuffer platformBuffer = {};
-			platformBuffer.memory               = renderBitmap.memory;
-			platformBuffer.height               = renderBitmap.height;
-			platformBuffer.width                = renderBitmap.width;
-			platformBuffer.bytesPerPixel        = renderBitmap.bytesPerPixel;
+			platformBuffer.memory               = globalRenderBitmap.memory;
+			platformBuffer.height               = globalRenderBitmap.height;
+			platformBuffer.width                = globalRenderBitmap.width;
+			platformBuffer.bytesPerPixel        = globalRenderBitmap.bytesPerPixel;
 			dchip8_update(platformBuffer, platformInput, platformMemory);
+
+			for (i32 i = 0; i < DQNT_ARRAY_COUNT(platformInput.key); i++)
+			{
+				if (platformInput.key[i].isDown)
+					OutputDebugString(L"Key is down\n");
+			}
 		}
 
 		////////////////////////////////////////////////////////////////////////
@@ -294,7 +320,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 			LONG clientHeight = clientRect.bottom - clientRect.top;
 
 			HDC deviceContext = GetDC(mainWindow);
-			win32_display_render_bitmap(renderBitmap, deviceContext,
+			win32_display_render_bitmap(globalRenderBitmap, deviceContext,
 			                            clientWidth, clientHeight);
 			ReleaseDC(mainWindow, deviceContext);
 		}

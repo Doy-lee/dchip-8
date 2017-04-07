@@ -184,9 +184,15 @@ FILE_SCOPE LRESULT CALLBACK win32_main_proc_callback(HWND window, UINT msg,
 
 		case WM_GETMINMAXINFO:
 		{
+			RECT rect   = {};
+			rect.right  = MIN_WIDTH;
+			rect.bottom = MIN_HEIGHT;
+			DWORD windowStyle = (DWORD)GetWindowLong(window, GWL_STYLE);
+			AdjustWindowRect(&rect, windowStyle, true);
+
 			MINMAXINFO *mmi  = (MINMAXINFO *)lParam;
-			mmi->ptMaxSize.x = MIN_WIDTH;
-			mmi->ptMaxSize.y = MIN_HEIGHT;
+			mmi->ptMinTrackSize.x = rect.left - rect.right;
+			mmi->ptMinTrackSize.y = rect.bottom - rect.top;
 		}
 		break;
 

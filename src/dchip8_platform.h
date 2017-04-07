@@ -21,25 +21,25 @@ enum Key
 	key_right,
 	key_escape,
 
-	key_7,
-	key_8,
-	key_9,
-	key_0,
+	key_1,
+	key_2,
+	key_3,
+	key_4,
 
-	key_U,
-	key_I,
-	key_O,
-	key_P,
+	key_q,
+	key_w,
+	key_e,
+	key_r,
 
-	key_J,
-	key_K,
-	key_L,
-	key_colon,
+	key_a,
+	key_s,
+	key_d,
+	key_f,
 
-	key_M,
-	key_comma,
-	key_dot,
-	key_forward_slash,
+	key_z,
+	key_x,
+	key_c,
+	key_v,
 
 	key_count,
 };
@@ -64,25 +64,25 @@ typedef struct PlatformInput
 			KeyState right;
 			KeyState escape;
 
-			KeyState key_7;
-			KeyState key_8;
-			KeyState key_9;
-			KeyState key_0;
+			KeyState key_1;
+			KeyState key_2;
+			KeyState key_3;
+			KeyState key_4;
 
-			KeyState key_U;
-			KeyState key_I;
-			KeyState key_O;
-			KeyState key_P;
+			KeyState key_q;
+			KeyState key_w;
+			KeyState key_e;
+			KeyState key_r;
 
-			KeyState key_J;
-			KeyState key_K;
-			KeyState key_L;
-			KeyState key_colon;
+			KeyState key_a;
+			KeyState key_s;
+			KeyState key_d;
+			KeyState key_f;
 
-			KeyState key_M;
-			KeyState key_comma;
-			KeyState key_dot;
-			KeyState key_forward_slash;
+			KeyState key_z;
+			KeyState key_x;
+			KeyState key_c;
+			KeyState key_v;
 		};
 	};
 } PlatformInput;

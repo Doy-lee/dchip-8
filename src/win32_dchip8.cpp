@@ -117,7 +117,7 @@ inline FILE_SCOPE LARGE_INTEGER win32_query_perf_counter_time()
 
 FILE_SCOPE inline void win32_parse_key_msg(KeyState *key, MSG msg)
 {
-	WPARAM lParam        = msg.lParam;
+	LPARAM lParam        = msg.lParam;
 	bool keyIsDown       = ((lParam >> 30) & 1);
 	bool keyTransitioned = ((lParam >> 31) & 1);
 
@@ -144,25 +144,25 @@ FILE_SCOPE void win32_process_messages(HWND window, PlatformInput *input)
 					case VK_LEFT: win32_parse_key_msg(&input->left, msg); break;
 					case VK_RIGHT: win32_parse_key_msg(&input->right, msg); break;
 
-					case '7': win32_parse_key_msg(&input->key_7, msg); break;
-					case '8': win32_parse_key_msg(&input->key_8, msg); break;
-					case '9': win32_parse_key_msg(&input->key_9, msg); break;
-					case '0': win32_parse_key_msg(&input->key_0, msg); break;
+					case '1': win32_parse_key_msg(&input->key_1, msg); break;
+					case '2': win32_parse_key_msg(&input->key_2, msg); break;
+					case '3': win32_parse_key_msg(&input->key_3, msg); break;
+					case '4': win32_parse_key_msg(&input->key_4, msg); break;
 
-					case 'U': win32_parse_key_msg(&input->key_U, msg); break;
-					case 'I': win32_parse_key_msg(&input->key_I, msg); break;
-					case 'O': win32_parse_key_msg(&input->key_O, msg); break;
-					case 'P': win32_parse_key_msg(&input->key_P, msg); break;
+					case 'Q': win32_parse_key_msg(&input->key_q, msg); break;
+					case 'W': win32_parse_key_msg(&input->key_w, msg); break;
+					case 'E': win32_parse_key_msg(&input->key_e, msg); break;
+					case 'R': win32_parse_key_msg(&input->key_r, msg); break;
 
-					case 'J': win32_parse_key_msg(&input->key_J, msg); break;
-					case 'K': win32_parse_key_msg(&input->key_K, msg); break;
-					case 'L': win32_parse_key_msg(&input->key_L, msg); break;
-					case ';': win32_parse_key_msg(&input->key_colon, msg); break;
+					case 'A': win32_parse_key_msg(&input->key_a, msg); break;
+					case 'S': win32_parse_key_msg(&input->key_s, msg); break;
+					case 'D': win32_parse_key_msg(&input->key_d, msg); break;
+					case 'F': win32_parse_key_msg(&input->key_f, msg); break;
 
-					case 'M': win32_parse_key_msg(&input->key_M, msg); break;
-					case ',': win32_parse_key_msg(&input->key_comma, msg); break;
-					case '.': win32_parse_key_msg(&input->key_dot, msg); break;
-					case '/': win32_parse_key_msg(&input->key_forward_slash, msg); break;
+					case 'Z': win32_parse_key_msg(&input->key_z, msg); break;
+					case 'X': win32_parse_key_msg(&input->key_x, msg); break;
+					case 'C': win32_parse_key_msg(&input->key_c, msg); break;
+					case 'V': win32_parse_key_msg(&input->key_v, msg); break;
 
 					case VK_ESCAPE:
 					{
@@ -279,7 +279,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	platformMemory.permanentMemSize = DQNT_ARRAY_COUNT(stackMemory);
 
 	QueryPerformanceFrequency(&globalQueryPerformanceFrequency);
-	const f32 TARGET_FRAMES_PER_S = 180.0f;
+	const f32 TARGET_FRAMES_PER_S = 540.0f;
 	f32 targetSecondsPerFrame     = 1 / TARGET_FRAMES_PER_S;
 	f32 frameTimeInS              = 0.0f;
 	globalRunning                 = true;

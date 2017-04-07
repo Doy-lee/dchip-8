@@ -15,6 +15,11 @@ enum Chip8State
 	chip8state_off,
 };
 
+typedef struct Chip8Controller
+{
+	bool key[0x10];
+} Chip8Controller;
+
 typedef struct Chip8CPU
 {
 	const u16 INIT_ADDRESS = 0x200;
@@ -66,7 +71,9 @@ typedef struct Chip8CPU
 	u8 stackPointer;
 	u16 stack[16];
 
-	u8 keyToStoreToRegisterIndex;
+	// Metadata
+	u8   storeKeyToRegisterIndex;
+	f32  elapsedTime;
 	enum Chip8State state;
 } Chip8CPU;
 
@@ -267,6 +274,45 @@ FILE_SCOPE void dchip8_init_display(PlatformRenderBuffer renderBuffer)
 	}
 }
 
+FILE_SCOPE Chip8Controller dchip8_controller_map_input(PlatformInput input)
+{
+	// NOTE: Chip8 Hex Controller to Keyboard Mapping
+	// Keypad         Keyboard
+	// +-+-+-+-+     +-+-+-+-+
+	// |1|2|3|C|     |1|2|3|4|
+	// +-+-+-+-+     +-+-+-+-+
+	// |4|5|6|D|     |Q|W|E|R|
+	// +-+-+-+-+  => +-+-+-+-+
+	// |7|8|9|E|     |A|S|D|F|
+	// +-+-+-+-+     +-+-+-+-+
+	// |A|0|B|F|     |Z|X|C|V|
+	// +-+-+-+-+     +-+-+-+-+
+
+	Chip8Controller result = {};
+
+	result.key[0x01] = input.key_1.isDown;
+	result.key[0x02] = input.key_2.isDown;
+	result.key[0x03] = input.key_3.isDown;
+	result.key[0x0C] = input.key_4.isDown;
+
+	result.key[0x04] = input.key_q.isDown;
+	result.key[0x05] = input.key_w.isDown;
+	result.key[0x06] = input.key_e.isDown;
+	result.key[0x0D] = input.key_r.isDown;
+
+	result.key[0x07] = input.key_a.isDown;
+	result.key[0x08] = input.key_s.isDown;
+	result.key[0x09] = input.key_d.isDown;
+	result.key[0x0E] = input.key_f.isDown;
+
+	result.key[0x0A] = input.key_z.isDown;
+	result.key[0x00] = input.key_x.isDown;
+	result.key[0x0B] = input.key_c.isDown;
+	result.key[0x0F] = input.key_v.isDown;
+
+	return result;
+}
+
 void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
                    PlatformMemory memory)
 {
@@ -275,7 +321,8 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 	DQNT_ASSERT(renderBuffer.bytesPerPixel == 4);
 	DQNT_ASSERT(memory.permanentMemSize == 4096);
 
-	u8 *mainMem = (u8 *)memory.permanentMem;
+	u8 *mainMem                = (u8 *)memory.permanentMem;
+	Chip8Controller controller = dchip8_controller_map_input(input);
 	if (cpu.state == chip8state_init)
 	{
 		dchip8_init_cpu(&cpu);
@@ -283,7 +330,6 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 		dchip8_init_display(renderBuffer);
 	}
 
-#if 1
 	if (cpu.state == chip8state_load_file)
 	{
 		PlatformFile file = {};
@@ -305,31 +351,27 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			platform_close_file(&file);
 		}
 	}
-#endif
 
 	if (cpu.state == chip8state_await_input)
 	{
-		const u32 OFFSET_TO_CHIP_CONTROLS = key_7;
-		for (i32 i = OFFSET_TO_CHIP_CONTROLS; i < DQNT_ARRAY_COUNT(input.key);
-		     i++)
+		for (i32 keyVal = 0; keyVal < DQNT_ARRAY_COUNT(controller.key); keyVal++)
 		{
-			KeyState checkKey = input.key[i];
-			if (checkKey.isDown)
+			if (controller.key[keyVal])
 			{
-				u8 regIndex = cpu.keyToStoreToRegisterIndex;
-				u8 keyVal   = (u8)i - OFFSET_TO_CHIP_CONTROLS;
-				DQNT_ASSERT(keyVal >= 0 && keyVal <= 0x0F);
+				u8 regIndex = cpu.storeKeyToRegisterIndex;
+				DQNT_ASSERT(keyVal >= 0 && keyVal < 0x0F);
 
-				cpu.registerArray[regIndex] = keyVal;
+				cpu.registerArray[regIndex] = (u8)keyVal;
 				cpu.state                   = chip8state_running;
+				break;
 			}
 		}
 	}
 
 	if (cpu.state == chip8state_running)
 	{
-		u8 opHighByte = mainMem[cpu.programCounter++];
-		u8 opLowByte  = mainMem[cpu.programCounter++];
+		u8 opHighByte              = mainMem[cpu.programCounter++];
+		u8 opLowByte               = mainMem[cpu.programCounter++];
 
 		u8 opFirstNibble = (opHighByte & 0xF0);
 		switch (opFirstNibble)
@@ -655,26 +697,21 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				DQNT_ASSERT(regNum < DQNT_ARRAY_COUNT(cpu.registerArray));
 				u8 vx = cpu.registerArray[regNum];
 				DQNT_ASSERT(vx >= 0 && vx <= 0x0F);
+				DQNT_ASSERT(vx < DQNT_ARRAY_COUNT(controller.key));
 
-				const u32 KEY_OFFSET_TO_START_CONTROLS = key_7;
-				DQNT_ASSERT((KEY_OFFSET_TO_START_CONTROLS + vx) <
-				            DQNT_ARRAY_COUNT(input.key));
-
-				KeyState checkKey =
-				    input.key[KEY_OFFSET_TO_START_CONTROLS + vx];
 				bool skipNextInstruction = false;
 				// SKP Vx - Ex9E - Skip next instruction if key with the value
 				// of Vx is pressed
 				if (opLowByte == 0x9E)
 				{
-					skipNextInstruction = checkKey.isDown;
+					skipNextInstruction = controller.key[vx];
 				}
 				// SKNP Vx - ExA1 - Skip next instruction if key with the value
 				// of Vx is not pressed
 				else
 				{
 					DQNT_ASSERT(opLowByte == 0xA1);
-					skipNextInstruction = !checkKey.isDown;
+					skipNextInstruction = !controller.key[vx];
 				}
 
 				if (skipNextInstruction) cpu.programCounter += 2;
@@ -696,8 +733,8 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 				// the key in Vx
 				else if (opLowByte == 0x0A)
 				{
-					cpu.state                     = chip8state_await_input;
-					cpu.keyToStoreToRegisterIndex = regNum;
+					cpu.state                   = chip8state_await_input;
+					cpu.storeKeyToRegisterIndex = regNum;
 				}
 				// LD DT, Vx - Fx15 - Set delay timer = Vx
 				else if (opLowByte == 0x15)
@@ -770,10 +807,27 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 			break;
 		};
 
-		if (cpu.delayTimer > 0) cpu.delayTimer--;
+		// IMPORTANT: Timers need to be decremented at a rate of 60hz. Since we
+		// can run the interpreter faster than that, make sure we decrement
+		// timers at the fixed rate.
+		if (cpu.delayTimer > 0 || cpu.soundTimer > 0)
+		{
+			cpu.elapsedTime += input.deltaForFrame;
+			f32 TIMER_DECREMENT_INTERVAL = 1 / 60.0f;
 
-		// TODO(doyle): This needs to play a buzzing sound whilst timer > 0
-		if (cpu.soundTimer > 0) cpu.soundTimer--;
+			if (cpu.elapsedTime >= TIMER_DECREMENT_INTERVAL)
+			{
+				cpu.elapsedTime = 0;
+				if (cpu.delayTimer > 0) cpu.delayTimer--;
+				// TODO(doyle): This needs to play a buzzing sound whilst timer
+				// > 0
+				if (cpu.soundTimer > 0) cpu.soundTimer--;
+			}
+		}
+		else
+		{
+			cpu.elapsedTime = 0;
+		}
 	}
 
 }

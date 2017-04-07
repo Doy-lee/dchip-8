@@ -115,14 +115,13 @@ inline FILE_SCOPE LARGE_INTEGER win32_query_perf_counter_time()
 	return result;
 }
 
-FILE_SCOPE inline void win32_parse_key_msg(KeyState *key, MSG msg)
+FILE_SCOPE inline void win32_update_key(KeyState *key, bool isDown)
 {
-	LPARAM lParam        = msg.lParam;
-	bool keyIsDown       = ((lParam >> 30) & 1);
-	bool keyTransitioned = ((lParam >> 31) & 1);
-
-	key->isDown = keyIsDown;
-	if (keyTransitioned) key->transitionCount++;
+	if (key->endedDown != isDown)
+	{
+		key->endedDown = isDown;
+		key->halfTransitionCount++;
+	}
 }
 
 FILE_SCOPE void win32_process_messages(HWND window, PlatformInput *input)
@@ -137,37 +136,38 @@ FILE_SCOPE void win32_process_messages(HWND window, PlatformInput *input)
 			case WM_KEYDOWN:
 			case WM_KEYUP:
 			{
+				bool isDown = (msg.message == WM_KEYDOWN);
 				switch (msg.wParam)
 				{
-					case VK_UP: win32_parse_key_msg(&input->up, msg); break;
-					case VK_DOWN: win32_parse_key_msg(&input->down, msg); break;
-					case VK_LEFT: win32_parse_key_msg(&input->left, msg); break;
-					case VK_RIGHT: win32_parse_key_msg(&input->right, msg); break;
+					case VK_UP: win32_update_key(&input->up, isDown); break;
+					case VK_DOWN: win32_update_key(&input->down, isDown); break;
+					case VK_LEFT: win32_update_key(&input->left, isDown); break;
+					case VK_RIGHT: win32_update_key(&input->right, isDown); break;
 
-					case '1': win32_parse_key_msg(&input->key_1, msg); break;
-					case '2': win32_parse_key_msg(&input->key_2, msg); break;
-					case '3': win32_parse_key_msg(&input->key_3, msg); break;
-					case '4': win32_parse_key_msg(&input->key_4, msg); break;
+					case '1': win32_update_key(&input->key_1, isDown); break;
+					case '2': win32_update_key(&input->key_2, isDown); break;
+					case '3': win32_update_key(&input->key_3, isDown); break;
+					case '4': win32_update_key(&input->key_4, isDown); break;
 
-					case 'Q': win32_parse_key_msg(&input->key_q, msg); break;
-					case 'W': win32_parse_key_msg(&input->key_w, msg); break;
-					case 'E': win32_parse_key_msg(&input->key_e, msg); break;
-					case 'R': win32_parse_key_msg(&input->key_r, msg); break;
+					case 'Q': win32_update_key(&input->key_q, isDown); break;
+					case 'W': win32_update_key(&input->key_w, isDown); break;
+					case 'E': win32_update_key(&input->key_e, isDown); break;
+					case 'R': win32_update_key(&input->key_r, isDown); break;
 
-					case 'A': win32_parse_key_msg(&input->key_a, msg); break;
-					case 'S': win32_parse_key_msg(&input->key_s, msg); break;
-					case 'D': win32_parse_key_msg(&input->key_d, msg); break;
-					case 'F': win32_parse_key_msg(&input->key_f, msg); break;
+					case 'A': win32_update_key(&input->key_a, isDown); break;
+					case 'S': win32_update_key(&input->key_s, isDown); break;
+					case 'D': win32_update_key(&input->key_d, isDown); break;
+					case 'F': win32_update_key(&input->key_f, isDown); break;
 
-					case 'Z': win32_parse_key_msg(&input->key_z, msg); break;
-					case 'X': win32_parse_key_msg(&input->key_x, msg); break;
-					case 'C': win32_parse_key_msg(&input->key_c, msg); break;
-					case 'V': win32_parse_key_msg(&input->key_v, msg); break;
+					case 'Z': win32_update_key(&input->key_z, isDown); break;
+					case 'X': win32_update_key(&input->key_x, isDown); break;
+					case 'C': win32_update_key(&input->key_c, isDown); break;
+					case 'V': win32_update_key(&input->key_v, isDown); break;
 
 					case VK_ESCAPE:
 					{
-						win32_parse_key_msg(&input->escape, msg);
-						if (input->escape.isDown) globalRunning = false;
+						win32_update_key(&input->escape, isDown);
+						if (input->escape.endedDown) globalRunning = false;
 					}
 					break;
 
@@ -279,7 +279,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	platformMemory.permanentMemSize = DQNT_ARRAY_COUNT(stackMemory);
 
 	QueryPerformanceFrequency(&globalQueryPerformanceFrequency);
-	const f32 TARGET_FRAMES_PER_S = 540.0f;
+	const f32 TARGET_FRAMES_PER_S = 30.0f;
 	f32 targetSecondsPerFrame     = 1 / TARGET_FRAMES_PER_S;
 	f32 frameTimeInS              = 0.0f;
 	globalRunning                 = true;
@@ -300,13 +300,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 			platformBuffer.height               = globalRenderBitmap.height;
 			platformBuffer.width                = globalRenderBitmap.width;
 			platformBuffer.bytesPerPixel = globalRenderBitmap.bytesPerPixel;
-			dchip8_update(platformBuffer, platformInput, platformMemory);
-
-			for (i32 i = 0; i < DQNT_ARRAY_COUNT(platformInput.key); i++)
-			{
-				if (platformInput.key[i].isDown)
-					OutputDebugString(L"Key is down\n");
-			}
+			dchip8_update(platformBuffer, platformInput, platformMemory, 15);
 		}
 
 		////////////////////////////////////////////////////////////////////////

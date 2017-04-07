@@ -4,6 +4,6 @@
 #include "dchip8_platform.h"
 
 void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
-                   PlatformMemory memory);
+                   PlatformMemory memory, u32 cyclesToEmulate);
 
 #endif

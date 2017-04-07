@@ -46,8 +46,8 @@ enum Key
 
 typedef struct KeyState
 {
-	bool isDown;
-	u32 transitionCount;
+	bool endedDown;
+	u32 halfTransitionCount;
 } KeyState;
 
 typedef struct PlatformInput

@@ -299,7 +299,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 			platformBuffer.memory               = globalRenderBitmap.memory;
 			platformBuffer.height               = globalRenderBitmap.height;
 			platformBuffer.width                = globalRenderBitmap.width;
-			platformBuffer.bytesPerPixel        = globalRenderBitmap.bytesPerPixel;
+			platformBuffer.bytesPerPixel = globalRenderBitmap.bytesPerPixel;
 			dchip8_update(platformBuffer, platformInput, platformMemory);
 
 			for (i32 i = 0; i < DQNT_ARRAY_COUNT(platformInput.key); i++)

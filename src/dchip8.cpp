@@ -287,7 +287,7 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 	if (cpu.state == chip8state_load_file)
 	{
 		PlatformFile file = {};
-		if (platform_open_file(L"roms/brix", &file))
+		if (platform_open_file(L"roms/pong", &file))
 		{
 			DQNT_ASSERT((cpu.INIT_ADDRESS + file.size) <=
 			            memory.permanentMemSize);
@@ -721,12 +721,11 @@ void dchip8_update(PlatformRenderBuffer renderBuffer, PlatformInput input,
 					DQNT_ASSERT(hexCharFromFontSet >= 0x00 &&
 					            hexCharFromFontSet <= 0x0F);
 
-					const u8 BITS_IN_BYTE     = 8;
-					u8 fontSizeInMem          = BITS_IN_BYTE * 5;
-					u16 startMemAddrOfFontSet = 0;
+					const u32 START_ADDR_OF_FONT = 0;
+					const u32 BYTES_PER_FONT = 5;
 
-					cpu.I = startMemAddrOfFontSet +
-					        (hexCharFromFontSet * fontSizeInMem);
+					cpu.I = START_ADDR_OF_FONT +
+					        (hexCharFromFontSet * BYTES_PER_FONT);
 				}
 				// LD B, Vx - Fx33 - Store BCD representations of Vx in memory
 				// locations I, I+1 and I+2
